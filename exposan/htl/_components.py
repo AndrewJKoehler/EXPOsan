@@ -184,7 +184,7 @@ def create_components(set_thermo=True):
     
     NaOH = Component('NaOH', phase='l', particle_size='Soluble',
                      degradability='Undegradable', organic=False)
-    
+
     NH42SO4 = Component('NH42SO4', phase='l', particle_size='Soluble',
                         degradability='Undegradable', organic=False)
     add_V_from_rho(NH42SO4, 1770)

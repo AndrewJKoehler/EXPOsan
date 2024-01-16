@@ -1191,15 +1191,15 @@ def create_model(system=None,
         
         @metric(name='C_afdw',units='%',element='Sankey')
         def get_C_afdw():
-            return WWTP.sludge_C*24/1000/(sys.flowsheet.stream.raw_wastewater.F_mass/157262.48454459725)/(1-WWTP.sludge_dw_ash)
+            return WWTP.sludge_C*24/1000/(sys.flowsheet.stream.feedstock_assumed_in_wastewater.F_mass/157262.48454459725)/(1-WWTP.sludge_dw_ash)
         
         @metric(name='N_afdw',units='%',element='Sankey')
         def get_N_afdw():
-            return WWTP.sludge_N*24/1000/(sys.flowsheet.stream.raw_wastewater.F_mass/157262.48454459725)/(1-WWTP.sludge_dw_ash)
+            return WWTP.sludge_N*24/1000/(sys.flowsheet.stream.feedstock_assumed_in_wastewater.F_mass/157262.48454459725)/(1-WWTP.sludge_dw_ash)
         
         @metric(name='P_afdw',units='%',element='Sankey')
         def get_P_afdw():
-            return WWTP.sludge_P*24/1000/(sys.flowsheet.stream.raw_wastewater.F_mass/157262.48454459725)/(1-WWTP.sludge_dw_ash)
+            return WWTP.sludge_P*24/1000/(sys.flowsheet.stream.feedstock_assumed_in_wastewater.F_mass/157262.48454459725)/(1-WWTP.sludge_dw_ash)
         
         @metric(name='sludge_C',units='kg/hr',element='Sankey')
         def get_sludge_C():

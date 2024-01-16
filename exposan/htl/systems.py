@@ -44,8 +44,9 @@ __all__ = ('create_system',)
 
 def create_system(configuration='baseline', capacity=100,
                   sludge_moisture_content=0.8, sludge_dw_ash_content=0.257, 
-                  sludge_afdw_lipid_content=0.204, sludge_afdw_protein_content=0.463,
+                  sludge_afdw_lipid_content=0.204, sludge_afdw_protein_content=0.463, NaOH_mol_value=3,
                   waste_cost=0, waste_GWP=0):
+
     configuration = configuration or 'baseline'
     if configuration not in ('baseline','no_P','PSA'):
         raise ValueError('`configuration` can only be "baseline", '
@@ -130,11 +131,18 @@ def create_system(configuration='baseline', capacity=100,
     # H1: SS PNNL 2020: 50 (17-76) Btu/hr/ft2/F ~ U = 0.284 (0.096-0.4313) kW/m2/K
     # but not in other heat exchangers (low viscosity, don't need U to enforce total heat transfer efficiency)
     # unit conversion: https://www.unitsconverters.com/en/Btu(It)/Hmft2mdegf-To-W/M2mk/Utu-4404-4398
+    
+    
     H1.register_alias('H1')
     
-    HTL = qsu.HydrothermalLiquefaction('A120', ins=H1-0, outs=('hydrochar','HTL_aqueous','biocrude','offgas_HTL'),
-                                       mositure_adjustment_exist_in_the_system=True)
+    HTL = qsu.HydrothermalLiquefaction('A120', ins=(H1-0,'NAOH_in'), outs=('hydrochar','HTL_aqueous','biocrude','offgas_HTL'),
+                                       mositure_adjustment_exist_in_the_system=True, NaOH_mol = NaOH_mol_value)
+  
+    HTL.ins[1].price =0.517 #include source, lists price per kg of NaOH
+    
     HTL.register_alias('HTL')
+    
+
     
     # =============================================================================
     # CHG (Area 200)
@@ -144,7 +152,12 @@ def create_system(configuration='baseline', capacity=100,
                              init_with='WasteStream', tau=24, vessel_material='Stainless steel')
     H2SO4_Tank.ins[0].price = 0.00658 # based on 93% H2SO4 and fresh water (dilute to 5%) price found in Davis 2020$/kg
     H2SO4_Tank.register_alias('H2SO4_Tank')
-    
+
+#NaOH
+#   H2SO4_Tank = qsu.StorageTank('T200', ins='H2SO4', outs=('H2SO4_out'),
+#                            init_with='WasteStream', tau=24, vessel_material='Stainless steel')
+#   H2SO4_Tank.ins[0].price = 0.517 # based on 50% NaOH and fresh water (dilute to 4,8,12% for 1,2,3M) price found in Davis 2020$/kg
+#   H2SO4_Tank.register_alias('H2SO4_Tank')    
 
     SP1 = qsu.ReversedSplitter('S200',ins=H2SO4_Tank-0, outs=('H2SO4_P','H2SO4_N'),
                                init_with='Stream')
@@ -172,6 +185,8 @@ def create_system(configuration='baseline', capacity=100,
     StruPre.ins[3].price = 0.2
     StruPre.outs[0].price = 0.661
     StruPre.register_alias('StruPre')
+    
+
     
     CHG = qsu.CatalyticHydrothermalGasification(
         'A230', ins=(StruPre-1, '7.8%_Ru/C'), outs=('CHG_out','7.8%_Ru/C_out'))
@@ -403,6 +418,32 @@ def create_system(configuration='baseline', capacity=100,
                         Carcinogenics=0.0000061925,
                         NonCarcinogenics=0.009977,
                         RespiratoryEffects=0.00000068933)
+    
+    ## add impact for NaOH
+    #qs.StreamImpactItem(ID='NAOH_in_item',
+    #                    linked_stream=stream.NAOH_in,
+    #                    Acidification=0.00665,
+     #                   Ecotoxicity=12.5,
+      #                  Eutrophication= 0.00572,
+       #                 GlobalWarming=1.35,
+        #                OzoneDepletion=0.000000762,
+         #               PhotochemicalOxidation=0.0766,
+          #              Carcinogenics=9.35E-08,
+           #             NonCarcinogenics=0.00000057,
+            #            RespiratoryEffects=0.0019)
+            
+    # # NaOH item, copied from Membrane distillation
+    # qs.StreamImpactItem(ID='NAOH_in_item',
+    #                     linked_stream=stream.NAOH_in,
+    #                     Acidification=0.33656,
+    #                     Ecotoxicity=0.77272,
+    #                     Eutrophication=0.00032908,
+    #                     GlobalWarming=1.2514,
+    #                     OzoneDepletion=7.89E-07,
+    #                     PhotochemicalOxidation=0.0033971,
+    #                     Carcinogenics=0.0070044,
+    #                     NonCarcinogenics=13.228,
+    #                     RespiratoryEffects=0.0024543)
     
     # Biocrude upgrading
     qs.StreamImpactItem(ID='H2_item',
