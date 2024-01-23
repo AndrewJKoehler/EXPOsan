@@ -46,6 +46,7 @@ def create_system(configuration='baseline', capacity=100,
                   sludge_moisture_content=0.8, sludge_dw_ash_content=0.257, 
                   sludge_afdw_lipid_content=0.204, sludge_afdw_protein_content=0.463, NaOH_mol_value=3,
                   waste_cost=0, waste_GWP=0):
+#TODO: change lipids and proteins based on average (Jan 23, 2024)
 
     configuration = configuration or 'baseline'
     if configuration not in ('baseline','no_P','PSA'):

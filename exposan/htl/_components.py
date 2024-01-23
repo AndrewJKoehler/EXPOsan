@@ -353,6 +353,19 @@ def create_components(set_thermo=True):
     C30H62 = Component('C30H62', search_ID='638-68-6', particle_size='Soluble',
                       degradability='Slowly', organic=True)
     
+#PFAS
+    PFOS = Component('C8HF17O3S', search_ID='1763-23-1', particle_size='Soluble',
+                     degradability='Undegradable', organic=True)
+
+    PFOA = Component('C8HF15O2', search_ID='335-67-1', particle_size='Soluble',
+                     degradability='Undegradable', organic=True)
+
+    PFHxA = Component('C6HF11O2', search_ID='307-24-4', particle_size='Soluble',
+                      degradability='Undegradable', organic=True)
+
+    PFHxS = Component('C6HF13O3S', search_ID='355-46-4', particle_size='Soluble',
+                      degradability='Undegradable', organic=True)
+    
     Gasoline = Component('Gasoline', search_ID='544-76-3', phase='l', particle_size='Soluble',
                          degradability='Slowly', organic=True)
     # Gasoline copies C16H34, do not need to be precise, since Gasoline is just used to calculte fuel production amount
