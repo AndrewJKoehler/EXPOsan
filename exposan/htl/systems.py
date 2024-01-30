@@ -42,12 +42,24 @@ from biosteam import settings
 
 __all__ = ('create_system',)
 
-def create_system(configuration='baseline', capacity=100,
-                  sludge_moisture_content=0.8, sludge_dw_ash_content=0.257, 
-                  sludge_afdw_lipid_content=0.204, sludge_afdw_protein_content=0.463, NaOH_mol_value=3,
-                  waste_cost=0, waste_GWP=0):
-#TODO: change lipids and proteins based on average (Jan 23, 2024)
+def create_system(configuration='baseline',feedstock='sludge', capacity=100,
+                  NaOH_mol_value=3, waste_cost=0, waste_GWP=0):
 
+#TODO: change lipids and proteins based on average (Jan 23, 2024)
+#TODO: find values for sludge and biosolids - CITE SOURCES (Jan 30, 2024)
+
+    if feedstock == 'sludge':
+        sludge_moisture_content=0.8
+        sludge_dw_ash_content=0.257
+        sludge_afdw_lipid_content=0.204
+        sludge_afdw_protein_content=0.463
+    
+    elif feedstock == 'biosolid':
+        sludge_moisture_content=0.8
+        sludge_dw_ash_content=0.257
+        sludge_afdw_lipid_content=0.204
+        sludge_afdw_protein_content=0.463
+        
     configuration = configuration or 'baseline'
     if configuration not in ('baseline','no_P','PSA'):
         raise ValueError('`configuration` can only be "baseline", '
@@ -89,6 +101,11 @@ def create_system(configuration='baseline', capacity=100,
     WWTP.register_alias('WWTP')
     
     raw_wastewater.price = -WWTP.ww_2_dry_sludge*waste_cost/3.79/(10**6)
+   
+    # =============================================================================
+    # Anaerobic Digester (Area 050)
+    # =============================================================================    
+    
     
     if WWTP.sludge_moisture <= 0.8:
         
