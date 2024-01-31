@@ -28,7 +28,6 @@ _m3perh_to_MGD = auom('m3/h').conversion_factor('MGD')
 _MJ_to_MMBTU = auom('MJ').conversion_factor('MMBTU')
 _MMgal_to_L = auom('gal').conversion_factor('L')*1000000
 
-
 # %%
 
 # =============================================================================

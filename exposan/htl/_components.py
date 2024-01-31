@@ -353,7 +353,7 @@ def create_components(set_thermo=True):
     C30H62 = Component('C30H62', search_ID='638-68-6', particle_size='Soluble',
                       degradability='Slowly', organic=True)
     
-#PFAS
+    #PFAS
     PFOS = Component('C8HF17O3S', search_ID='1763-23-1', particle_size='Soluble',
                      degradability='Undegradable', organic=True)
 
@@ -397,19 +397,18 @@ def create_components(set_thermo=True):
     Membrane.copy_models_from(Chemical('CaCO3'),('Cn',))
     
     cmps = Components([Sludge_lipid, Sludge_protein, Sludge_carbo, Sludge_ash,
-                       Struvite, Hydrochar, Residual,
-                       Biocrude, HTLaqueous, H2O, C, N, P,
-                       O2, N2, CH4, C2H6, C3H8, CO2, CO, H2, NH3,
-                       H2SO4, H3PO4, MgCl2, MgO, NaOH, NH42SO4, NH4Cl,
-                       C4H10, TWOMBUTAN, NPENTAN, TWOMPENTA, CYCHEX, HEXANE,
-                       TWOMHEXAN, HEPTANE, CC6METH, PIPERDIN, TOLUENE,
-                       THREEMHEPTA, OCTANE, ETHCYC6, ETHYLBEN, OXYLENE, C9H20,
-                       PROCYC6, C3BENZ, FOURMONAN, C10H22, C4BENZ,
-                       C11H24, C10H12, C12H26, C13H28, C14H30, OTTFNA, C6BENZ,
-                       OTTFSN, C7BENZ, C8BENZ, C10H16O4, C15H32, C16H34,
-                       C17H36, C18H38, C19H40, C20H42, C21H44,
-                       TRICOSANE, C24H38O4, C26H42O4, C30H62, Gasoline, Diesel,
-                       CHG_catalyst, HT_catalyst, HC_catalyst, Membrane])
+                       Struvite, Hydrochar, Residual, Biocrude, HTLaqueous, H2O,
+                       C, N, P, O2, N2, CH4, C2H6, C3H8, CO2, CO, H2, NH3,
+                       H2SO4, H3PO4, MgCl2, MgO, NaOH, NH42SO4, NH4Cl, C4H10,
+                       TWOMBUTAN, NPENTAN, TWOMPENTA, CYCHEX, HEXANE, TWOMHEXAN,
+                       HEPTANE, CC6METH, PIPERDIN, TOLUENE, THREEMHEPTA, OCTANE,
+                       ETHCYC6, ETHYLBEN, OXYLENE, C9H20, PROCYC6, C3BENZ,
+                       FOURMONAN, C10H22, C4BENZ, C11H24, C10H12, C12H26,
+                       C13H28, C14H30, OTTFNA, C6BENZ, OTTFSN, C7BENZ, C8BENZ,
+                       C10H16O4, C15H32, C16H34, C17H36, C18H38, C19H40, C20H42,
+                       C21H44, TRICOSANE, C24H38O4, C26H42O4, C30H62, PFOS,
+                       PFOA, PFHxA, PFHxS, Gasoline, Diesel, CHG_catalyst,
+                       HT_catalyst, HC_catalyst, Membrane])
     
     for i in cmps:
         for attr in ('HHV', 'LHV', 'Hf'):
