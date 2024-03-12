@@ -42,9 +42,10 @@ from biosteam import settings
 
 __all__ = ('create_system',)
 
-def create_system(configuration='baseline',feedstock='sludge', capacity=100,
+def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinetics",
+                  capacity=100,rxn_time_value=60, rxn_temp_value=350,
                   NaOH_mol_value=3, waste_cost=0, waste_GWP=0, high_IRR=False):
-
+#TODO: add true/false statement for kinetics, user has to select Kinetics or MCA
 #TODO: change lipids and proteins based on average (Jan 23, 2024)
 #TODO: find values for sludge and biosolids - CITE SOURCES (Jan 30, 2024)
 
@@ -52,7 +53,7 @@ def create_system(configuration='baseline',feedstock='sludge', capacity=100,
         sludge_moisture_content=0.8
         sludge_dw_ash_content=0.257
         sludge_afdw_lipid_content=0.204
-        sludge_afdw_protein_content=0.463
+        sludge_afdw_protein_content=0.463      
         N_2_P_value=0.3927
     
     elif feedstock == 'biosolid':
@@ -61,6 +62,12 @@ def create_system(configuration='baseline',feedstock='sludge', capacity=100,
         sludge_afdw_lipid_content=0.204
         sludge_afdw_protein_content=0.463
         N_2_P_value=0.3927
+ 
+    if HTLmodel == "Kinetics":
+        if feedstock == 'sludge':
+            sludge_afdw_lignin_content=0.02
+        elif feedstock == 'biosolid':
+            sludge_afdw_lignin_content=0.02
         
     configuration = configuration or 'baseline'
     if configuration not in ('baseline','no_P','PSA'):
@@ -93,13 +100,25 @@ def create_system(configuration='baseline',feedstock='sludge', capacity=100,
     # =============================================================================
     # pretreatment (Area 000)
     # =============================================================================
-                
-    WWTP = su.WWTP('S000', ins=raw_wastewater, outs=('sludge','treated_water'),
-                   ww_2_dry_sludge=1,
-                   # how much metric ton/day sludge can be produced by 1 MGD of ww
-                   sludge_moisture=sludge_moisture_content, sludge_dw_ash=sludge_dw_ash_content, 
-                   sludge_afdw_lipid=sludge_afdw_lipid_content, sludge_afdw_protein=sludge_afdw_protein_content,
-                   N_2_P=N_2_P_value, operation_hours=7920)
+    if HTLmodel == 'MCA':             
+        WWTP = su.WWTP('S000', ins=raw_wastewater, outs=('sludge','treated_water'),
+                       ww_2_dry_sludge=1,
+                       # how much metric ton/day sludge can be produced by 1 MGD of ww
+                       sludge_moisture=sludge_moisture_content,
+                       sludge_dw_ash=sludge_dw_ash_content, 
+                       sludge_afdw_lipid=sludge_afdw_lipid_content,
+                       sludge_afdw_protein=sludge_afdw_protein_content,
+                       N_2_P=N_2_P_value, operation_hours=7920)
+    
+    elif HTLmodel == 'Kinetics':
+        WWTP = su.WWTP('S000', ins=raw_wastewater, outs=('sludge','treated_water'),
+                        ww_2_dry_sludge=1,
+                        # how much metric ton/day sludge can be produced by 1 MGD of ww
+                        sludge_moisture=sludge_moisture_content, sludge_dw_ash=sludge_dw_ash_content, 
+                        sludge_afdw_lipid=sludge_afdw_lipid_content, 
+                        sludge_afdw_lignin=sludge_afdw_lignin_content,
+                        sludge_afdw_protein=sludge_afdw_protein_content,
+                        N_2_P=N_2_P_value, operation_hours=7920)   
     WWTP.register_alias('WWTP')
     
     raw_wastewater.price = -WWTP.ww_2_dry_sludge*waste_cost/3.79/(10**6)
@@ -116,7 +135,12 @@ def create_system(configuration='baseline',feedstock='sludge', capacity=100,
         # water weight: https://www.omnicalculator.com/conversion/kg-to-gallons#:~:text=1%20gal%20%3D%203.79%20kg%20of%20water (accessed 2023-10-27)
         # tap water price: https://portal.ct.gov/-/media/Departments-and-Agencies/DPH/dph/drinking_water/pdf/dwcfedfundpdf.pdf (accessed 2023-10-27)
         Humidifier.register_alias('Humidifier')
-        
+      #TODO add anerobicCST here
+      #if feedstock = biosolid - anaerobic CST
+      #two effluents - if you have gas, send that stream to the CHP
+      # send methane to GasMixer
+      #anaerobic digestor stream[0] send to next step
+      
         P1 = qsu.SludgePump('A100', ins=Humidifier-0, outs='press_sludge', P=3049.7*6894.76,
                   init_with='Stream')
         # Jones 2014: 3049.7 psia
@@ -125,12 +149,21 @@ def create_system(configuration='baseline',feedstock='sludge', capacity=100,
     
     elif WWTP.sludge_moisture > 0.8:
 
-        SluC = qsu.SludgeCentrifuge('A000', ins=WWTP-0,
-                                outs=('supernatant','compressed_sludge'),
-                                init_with='Stream',
-                                solids=('Sludge_lipid','Sludge_protein',
-                                        'Sludge_carbo','Sludge_ash'),
-                                sludge_moisture=0.8)
+        if HTLmodel == 'MCA':        
+            SluC = qsu.SludgeCentrifuge('A000', ins=WWTP-0,
+                                    outs=('supernatant','compressed_sludge'),
+                                    init_with='Stream',
+                                    solids=('Sludge_lipid','Sludge_protein',
+                                            'Sludge_carbo','Sludge_ash'),
+                                    sludge_moisture=0.8)
+        elif HTLmodel == 'Kinetics':
+            SluC = qsu.SludgeCentrifuge('A000', ins=WWTP-0,
+                                    outs=('supernatant','compressed_sludge'),
+                                    init_with='Stream',
+                                    solids=('Sludge_lipid','Sludge_protein',
+                                            'Sludge_carbo','Sludge_ash','Sludge_lignin'),
+                                    sludge_moisture=0.8)        
+      
         SluC.register_alias('SluC')
         
         P1 = qsu.SludgePump('A100', ins=SluC-1, outs='press_sludge', P=3049.7*6894.76,
@@ -152,10 +185,14 @@ def create_system(configuration='baseline',feedstock='sludge', capacity=100,
     # but not in other heat exchangers (low viscosity, don't need U to enforce total heat transfer efficiency)
     # unit conversion: https://www.unitsconverters.com/en/Btu(It)/Hmft2mdegf-To-W/M2mk/Utu-4404-4398
     H1.register_alias('H1')
-    
-    HTL = qsu.HydrothermalLiquefaction('A120', ins=(H1-0,'NAOH_in'), outs=('hydrochar','HTL_aqueous','biocrude','offgas_HTL'),
-                                       mositure_adjustment_exist_in_the_system=True, NaOH_mol = NaOH_mol_value)
-  
+#TODO once new name, kinetics = true, call kinetics, if false, call MCA (old HTL) 
+    if HTLmodel == 'MCA':    
+        HTL = qsu.HydrothermalLiquefactionMCA('A120', ins=(H1-0,'NAOH_in', 'PFAS_in'), outs=('hydrochar','HTL_aqueous','biocrude','offgas_HTL'),
+                                           mositure_adjustment_exist_in_the_system=True, NaOH_mol = NaOH_mol_value)
+    elif HTLmodel == 'Kinetics':    
+        HTL = qsu.HydrothermalLiquefactionKinetics('A120', ins=(H1-0,'NAOH_in', 'PFAS_in'), outs=('hydrochar','HTL_aqueous','biocrude','offgas_HTL'),
+                                           mositure_adjustment_exist_in_the_system=True, NaOH_mol = NaOH_mol_value, feedstock = feedstock, rxn_time = rxn_time_value, rxn_temp = rxn_temp_value)
+        
     HTL.ins[1].price =0.517 #include source, lists price per kg of NaOH
     HTL.register_alias('HTL')
     

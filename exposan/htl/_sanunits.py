@@ -536,7 +536,8 @@ class WWTP(SanUnit):
                  init_with='WasteStream', 
                  ww_2_dry_sludge=0.94, # [1]
                  sludge_moisture=0.99, sludge_dw_ash=0.257, 
-                 sludge_afdw_lipid=0.204, sludge_afdw_protein=0.463, 
+                 sludge_afdw_lipid=0.204, sludge_afdw_protein=0.463,
+                 sludge_afdw_lignin=0.00,
                  lipid_2_C=0.750,
                  protein_2_C=0.545,
                  carbo_2_C=0.400, 
@@ -552,6 +553,7 @@ class WWTP(SanUnit):
         self.sludge_moisture = sludge_moisture
         self.sludge_dw_ash = sludge_dw_ash
         self.sludge_afdw_lipid = sludge_afdw_lipid
+        self.sludge_afdw_lignin = sludge_afdw_lignin
         self.sludge_afdw_protein = sludge_afdw_protein
         self.lipid_2_C = lipid_2_C
         self.protein_2_C = protein_2_C
@@ -567,12 +569,12 @@ class WWTP(SanUnit):
         
         ww = self.ins[0]
         sludge, treated = self.outs
-
+#TODO ask Jianan if lignin should be included
         self.sludge_afdw_carbo = round(1 - self.sludge_afdw_protein - self.sludge_afdw_lipid, 5)   
         
         if self.sludge_dw_ash >= 1:
             raise Exception ('ash can not be larger than or equal to 1')
-        
+#TODO ask Jianan if lignin should be included in sludge_C_ratio         
         if self.sludge_afdw_protein + self.sludge_afdw_lipid > 1:
             raise Exception ('protein and lipid exceed 1')
             
@@ -585,6 +587,7 @@ class WWTP(SanUnit):
         sludge.imass['Sludge_lipid'] = sludge_afdw*self.sludge_afdw_lipid
         sludge.imass['Sludge_protein'] = sludge_afdw*self.sludge_afdw_protein
         sludge.imass['Sludge_carbo'] = sludge_afdw*self.sludge_afdw_carbo
+        sludge.imass['Sludge_lignin'] = sludge_afdw*self.sludge_afdw_lignin
 
         treated.imass['H2O'] = ww.F_mass - sludge.F_mass
     
@@ -595,16 +598,20 @@ class WWTP(SanUnit):
     @property
     def sludge_dw_lipid(self):
         return self.sludge_afdw_lipid*(1-self.sludge_dw_ash)
-    
+
+    @property
+    def sludge_dw_lignin(self):
+        return self.sludge_afdw_lignin*(1-self.sludge_dw_ash)  
+
     @property
     def sludge_dw_carbo(self):
         return self.sludge_afdw_carbo*(1-self.sludge_dw_ash)
-    
+#TODO ask Jianan if lignin should be included in sludge_C_ratio   
     @property
     def sludge_C_ratio(self):
        return self.sludge_dw_protein*self.protein_2_C + self.sludge_dw_lipid*self.lipid_2_C +\
            self.sludge_dw_carbo*self.carbo_2_C
-           
+  #TODO ask Jianan if lignin should be included in sludge_H_ratio           
     @property
     def sludge_H_ratio(self):
        return self.sludge_dw_protein*self.protein_2_H + self.sludge_dw_lipid*self.lipid_2_H +\

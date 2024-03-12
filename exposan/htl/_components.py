@@ -62,7 +62,23 @@ def create_components(set_thermo=True):
     # Leow et al., 2015
     Sludge_lipid.mu.add_model(6000)
     # made up value, so that HTL.ins[0].nu = 0.03 m2/s ~30000 cSt
-    # (NREL 2013 appendix B)
+    # (NREL 2013 appendix B)   
+ 
+    Sludge_lignin = Component('Sludge_lignin', phase='s',
+                              particle_size='Particulate',
+                              formula='C56H95O24N9P',
+                              degradability='Undegradable',
+                              organic=False)
+    add_V_from_rho(Sludge_lignin, 1400)
+    # https://www.climate-policy-watcher.org/wastewater-sludge/physical-
+    # and-biological-properties.html (accessed 2022-10-23)
+    # https://web.deu.edu.tr/atiksu/ana52/wdesign06.html (accessed 2022-10-23)
+    Sludge_lignin.HHV = 22.0*10**6*Sludge_lignin.MW/1000  #Li et al., 2018
+    Sludge_lignin.Cn.add_model(1.25*10**3*Sludge_lignin.MW/1000)
+    # Leow et al., 2015    
+    Sludge_lignin.mu.add_model(6000)
+    # made up value, so that HTL.ins[0].nu = 0.03 m2/s ~30000 cSt
+    # (NREL 2013 appendix B)   
     
     Sludge_protein = Component('Sludge_protein', phase='s',
                                 particle_size='Particulate',
@@ -354,18 +370,21 @@ def create_components(set_thermo=True):
                       degradability='Slowly', organic=True)
     
     #PFAS
-    PFOS = Component('C8HF17O3S', search_ID='1763-23-1', particle_size='Soluble',
+    PFOS = Component('C8HF17O3S', search_ID='1763-23-1', phase='l', particle_size='Soluble',
                      degradability='Undegradable', organic=True)
-
-    PFOA = Component('C8HF15O2', search_ID='335-67-1', particle_size='Soluble',
+    add_V_from_rho(PFOS, 1800)
+#TODO double check value
+    PFOA = Component('C8HF15O2', search_ID='335-67-1', phase='l', particle_size='Soluble',
                      degradability='Undegradable', organic=True)
-
-    PFHxA = Component('C6HF11O2', search_ID='307-24-4', particle_size='Soluble',
-                      degradability='Undegradable', organic=True)
-
-    PFHxS = Component('C6HF13O3S', search_ID='355-46-4', particle_size='Soluble',
-                      degradability='Undegradable', organic=True)
     
+    PFHxS = Component('C6HF13O3S', search_ID='355-46-4', phase='l', particle_size='Soluble',
+                    degradability='Undegradable', organic=True)    
+    
+    PFHxA = Component('C6HF11O2', search_ID='307-24-4', phase='l', particle_size='Soluble',
+                      degradability='Undegradable', organic=True)
+
+  
+
     Gasoline = Component('Gasoline', search_ID='544-76-3', phase='l', particle_size='Soluble',
                          degradability='Slowly', organic=True)
     # Gasoline copies C16H34, do not need to be precise, since Gasoline is just used to calculte fuel production amount
@@ -396,7 +415,7 @@ def create_components(set_thermo=True):
     add_V_from_rho(Membrane, 1500)
     Membrane.copy_models_from(Chemical('CaCO3'),('Cn',))
     
-    cmps = Components([Sludge_lipid, Sludge_protein, Sludge_carbo, Sludge_ash,
+    cmps = Components([Sludge_lipid, Sludge_protein, Sludge_carbo, Sludge_ash, Sludge_lignin,
                        Struvite, Hydrochar, Residual, Biocrude, HTLaqueous, H2O,
                        C, N, P, O2, N2, CH4, C2H6, C3H8, CO2, CO, H2, NH3,
                        H2SO4, H3PO4, MgCl2, MgO, NaOH, NH42SO4, NH4Cl, C4H10,
