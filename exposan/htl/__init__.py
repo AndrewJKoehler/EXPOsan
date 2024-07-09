@@ -70,7 +70,7 @@ def __getattr__(name):
             f'Module {__name__} does not have the attribute "{name}" '
             'and the module has not been loaded, '
             f'loading the module with `{__name__}.load()` may solve the issue.')
-        
+import pandas as ps        
 from . import models
 from .models import *
 
@@ -88,6 +88,9 @@ def simulate_and_save(model,
     parameters = model.table.iloc[:, :idx]
     results = model.table.iloc[:, idx:]
     percentiles = results.quantile([0, 0.05, 0.25, 0.5, 0.75, 0.95, 1])
+    model_info = {'Category': ['Model', 'IRR', 'Biosolid wt%', 'Added NaOH'],'Info': [model.system.flowsheet.HTL.model_type, model.system.TEA.IRR, model.system.flowsheet.Humidifier.set_moisture_lvl, model.system.flowsheet.HTL.NaOH_molarity]}
+    info_df=pd.DataFrame(model_info)
+
     if include_spearman:
         kwargs = {'nan_policy': 'omit'}
         kwargs.update(spearman_kwargs)
@@ -98,12 +101,16 @@ def simulate_and_save(model,
         N = model.table.shape[0]
         path = path or os.path.join(results_path, f'{date.today()}_{ID}_{N}_{notes}.xlsx')
         with pd.ExcelWriter(path) as writer:
+            info_df.to_excel(writer, sheet_name='Model_Info')
             parameters.to_excel(writer, sheet_name='Parameters')
             results.to_excel(writer, sheet_name='Results')
             percentiles.to_excel(writer, sheet_name='Percentiles')
+#            percentiles.to_excel(writer, sheet_name='Model Conditions')
             if include_spearman:
                 r_df.to_excel(writer, sheet_name='Spearman_r')
                 p_df.to_excel(writer, sheet_name='Spearman_p')
+            
+                
 
 __all__ = (
     'htl_path',

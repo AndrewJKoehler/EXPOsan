@@ -53,8 +53,8 @@ def create_model(system=None,
     stream = flowsheet.stream
     model = qs.Model(sys)
     param = model.parameter
-    if feedstock not in ['sludge','food','fog','green','manure']:
-        raise ValueError("invalid feedstock, select from 'sludge', 'food', 'fog', 'green', and 'manure'")
+    if feedstock not in ['sludge','biosolid','food','fog','green','manure']:
+        raise ValueError("invalid feedstock, select from 'sludge', 'biosolid', 'food', 'fog', 'green', and 'manure'")
     
     # =========================================================================
     # WWTP
@@ -158,7 +158,60 @@ def create_model(system=None,
                     distribution=dist)
             def set_N_2_P(i):
                 WWTP.N_2_P=i
-                
+   
+        if feedstock == 'biosolid': #TODO update values for biosolids
+           
+           dist = shape.Uniform(0.6,0.8)
+           @param(name='sludge_moisture',
+                   element=WWTP,
+                   kind='coupled',
+                   units='-',
+                   baseline=0.7,
+                   distribution=dist)
+           def set_WWTP_biosolids_moisture(i):
+               WWTP.sludge_moisture=i
+           
+           dist = shape.Triangle(0.174,0.257,0.414)
+           @param(name='sludge_dw_ash',
+                   element=WWTP,
+                   kind='coupled',
+                   units='-',
+                   baseline=0.257,
+                   distribution=dist)
+           def set_biosolids_dw_ash(i):
+               WWTP.sludge_dw_ash=i
+           
+           dist = shape.Triangle(0.08,0.204,0.308)
+           @param(name='sludge_afdw_lipid',
+                   element=WWTP,
+                   kind='coupled',
+                   units='-',
+                   baseline=0.204,
+                   distribution=dist)
+           def set_biosolids_afdw_lipid(i):
+               WWTP.sludge_afdw_lipid=i
+           
+           dist = shape.Triangle(0.20,0.25,0.30)
+           @param(name='sludge_afdw_protein',
+                   element=WWTP,
+                   kind='coupled',
+                   units='-',
+                   baseline=0.463,
+                   distribution=dist)
+           def set_biosolids_afdw_protein(i):
+               WWTP.sludge_afdw_protein=i
+        
+               
+           dist = shape.Triangle(0.1944,0.3927,0.5556)
+           @param(name='N_2_P',
+                   element=WWTP,
+                   kind='coupled',
+                   units='-',
+                   baseline=0.3927,
+                   distribution=dist)
+           def set_N_2_P(i):
+               WWTP.N_2_P=i    
+           
         if feedstock == 'food':
             
             dist = shape.Uniform(0.68,0.8)

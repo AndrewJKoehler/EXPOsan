@@ -43,14 +43,14 @@ from biosteam import settings
 __all__ = ('create_system',)
 
 def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinetics",
-                  capacity=100,rxn_time_value=60, rxn_temp_value=350,
+                  capacity=100,rxn_time_value=60, rxn_temp_value=350, set_moisture = 0.8,
                   NaOH_mol_value=3, waste_cost=0, waste_GWP=0, high_IRR=False):
 #TODO: add true/false statement for kinetics, user has to select Kinetics or MCA
 #TODO: change lipids and proteins based on average (Jan 23, 2024)
 #TODO: find values for sludge and biosolids - CITE SOURCES (Jan 30, 2024)
 
     if feedstock == 'sludge':
-        sludge_moisture_content=0.8
+        sludge_moisture_content=0.8 #TODO investigate raising to ~0.97
         sludge_dw_ash_content=0.257
         sludge_afdw_lipid_content=0.204
         sludge_afdw_protein_content=0.463      
@@ -127,9 +127,15 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
     # Anaerobic Digester (Area 050)
     # =============================================================================    
     
-    if WWTP.sludge_moisture <= 0.8:
+#    if feedstock == 'biosolid':
+#        AD1 = qsu.
+# TODO determine which of the sanunits within _anaerobic_reactor.py should be used
+#TODO evaluate if it is necessary to use a sanunit - what is the desired goal?
+#Do we want to know how the sludge components change? Or do we just want the system LCA/cost/biogas production and fugu
+    
+    if WWTP.sludge_moisture <= set_moisture:
         
-        Humidifier = su.Humidifier(ID='S010', ins=(WWTP-0, 'makeup_water', 'recycle'), outs='HTL_influent')
+        Humidifier = su.Humidifier(ID='S010', ins=(WWTP-0, 'makeup_water', 'recycle'), outs='HTL_influent', set_moisture = set_moisture)
 
         Humidifier.ins[1].price = 0.000528 # U.S. average price: 2 $/1000 gal (1 gal = 3.79 kg)
         # water weight: https://www.omnicalculator.com/conversion/kg-to-gallons#:~:text=1%20gal%20%3D%203.79%20kg%20of%20water (accessed 2023-10-27)
@@ -141,13 +147,14 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
       # send methane to GasMixer
       #anaerobic digestor stream[0] send to next step
       
+      
         P1 = qsu.SludgePump('A100', ins=Humidifier-0, outs='press_sludge', P=3049.7*6894.76,
                   init_with='Stream')
         # Jones 2014: 3049.7 psia
         P1.register_alias('P1')
         P1.include_construction = True
     
-    elif WWTP.sludge_moisture > 0.8:
+    elif WWTP.sludge_moisture > set_moisture:
 
         if HTLmodel == 'MCA':        
             SluC = qsu.SludgeCentrifuge('A000', ins=WWTP-0,
@@ -155,14 +162,14 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
                                     init_with='Stream',
                                     solids=('Sludge_lipid','Sludge_protein',
                                             'Sludge_carbo','Sludge_ash'),
-                                    sludge_moisture=0.8)
+                                    sludge_moisture=set_moisture)
         elif HTLmodel == 'Kinetics':
             SluC = qsu.SludgeCentrifuge('A000', ins=WWTP-0,
                                     outs=('supernatant','compressed_sludge'),
                                     init_with='Stream',
                                     solids=('Sludge_lipid','Sludge_protein',
                                             'Sludge_carbo','Sludge_ash','Sludge_lignin'),
-                                    sludge_moisture=0.8)        
+                                    sludge_moisture=set_moisture)        
       
         SluC.register_alias('SluC')
         
@@ -177,7 +184,7 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
     # =============================================================================
     
     H1 = qsu.HXutility('A110', include_construction=True,
-                       ins=P1-0, outs='heated_sludge', T=351+273.15,
+                       ins=P1-0, outs='heated_sludge', T=rxn_temp_value+273.15, #change temperature, add as parameter in create system
                        U=0.0198739, init_with='Stream', rigorous=True)
     # feed T is low, thus high viscosity and low U (case B in Knorr 2013)
     # U: 3, 3.5, 4 BTU/hr/ft2/F as minimum, baseline, and maximum
@@ -188,7 +195,7 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
 #TODO once new name, kinetics = true, call kinetics, if false, call MCA (old HTL) 
     if HTLmodel == 'MCA':    
         HTL = qsu.HydrothermalLiquefactionMCA('A120', ins=(H1-0,'NAOH_in', 'PFAS_in'), outs=('hydrochar','HTL_aqueous','biocrude','offgas_HTL'),
-                                           mositure_adjustment_exist_in_the_system=True, NaOH_mol = NaOH_mol_value)
+                                           mositure_adjustment_exist_in_the_system=True, NaOH_mol = NaOH_mol_value, rxn_time = rxn_time_value, rxn_temp = rxn_temp_value, sludge_moisture = set_moisture)
     elif HTLmodel == 'Kinetics':    
         HTL = qsu.HydrothermalLiquefactionKinetics('A120', ins=(H1-0,'NAOH_in', 'PFAS_in'), outs=('hydrochar','HTL_aqueous','biocrude','offgas_HTL'),
                                            mositure_adjustment_exist_in_the_system=True, NaOH_mol = NaOH_mol_value, feedstock = feedstock, rxn_time = rxn_time_value, rxn_temp = rxn_temp_value)
@@ -469,18 +476,18 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
                         NonCarcinogenics=0,
                         RespiratoryEffects=0)
     
-    # add impact for makeup water
-    qs.StreamImpactItem(ID='makeup_water_item',
-                        linked_stream=stream.makeup_water,
-                        Acidification=0.00011676,
-                        Ecotoxicity=0.0050151,
-                        Eutrophication=0.000000073096,
-                        GlobalWarming=0.00030228,
-                        OzoneDepletion=0.00000000016107,
-                        PhotochemicalOxidation=0.00000074642,
-                        Carcinogenics=0.0000061925,
-                        NonCarcinogenics=0.009977,
-                        RespiratoryEffects=0.00000068933)
+    # # add impact for makeup water
+    # qs.StreamImpactItem(ID='makeup_water_item',
+    #                     linked_stream=stream.makeup_water,
+    #                     Acidification=0.00011676,
+    #                     Ecotoxicity=0.0050151,
+    #                     Eutrophication=0.000000073096,
+    #                     GlobalWarming=0.00030228,
+    #                     OzoneDepletion=0.00000000016107,
+    #                     PhotochemicalOxidation=0.00000074642,
+    #                     Carcinogenics=0.0000061925,
+    #                     NonCarcinogenics=0.009977,
+    #                     RespiratoryEffects=0.00000068933)
     
     ## add impact for NaOH
     #qs.StreamImpactItem(ID='NAOH_in_item',

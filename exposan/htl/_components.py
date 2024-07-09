@@ -370,17 +370,19 @@ def create_components(set_thermo=True):
                       degradability='Slowly', organic=True)
     
     #PFAS
-    PFOS = Component('C8HF17O3S', search_ID='1763-23-1', phase='l', particle_size='Soluble',
+    PFOS = Component('C8HF17O3S', search_ID='1763-23-1', phase='s', particle_size='Soluble',
                      degradability='Undegradable', organic=True)
     add_V_from_rho(PFOS, 1800)
+    
 #TODO double check value
-    PFOA = Component('C8HF15O2', search_ID='335-67-1', phase='l', particle_size='Soluble',
+    PFOA = Component('C8HF15O2', search_ID='335-67-1', phase='s', particle_size='Soluble',
                      degradability='Undegradable', organic=True)
     
-    PFHxS = Component('C6HF13O3S', search_ID='355-46-4', phase='l', particle_size='Soluble',
+    PFHxS = Component('C6HF13O3S', search_ID='355-46-4', phase='s', particle_size='Soluble',
                     degradability='Undegradable', organic=True)    
+    add_V_from_rho(PFHxS, 1841)
     
-    PFHxA = Component('C6HF11O2', search_ID='307-24-4', phase='l', particle_size='Soluble',
+    PFHxA = Component('C6HF11O2', search_ID='307-24-4', phase='s', particle_size='Soluble',
                       degradability='Undegradable', organic=True)
 
   

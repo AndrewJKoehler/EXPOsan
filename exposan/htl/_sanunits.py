@@ -123,7 +123,7 @@ class AcidExtraction(Reactor):
                 residual.P = hydrochar.P
                 # H2SO4 reacts with hydrochar to release heat and temperature will be
                 # increased mixture's temperature
-            
+                #TODO comment out heat and temperature,
     @property
     def residual_C(self):
         return self.ins[0]._source.hydrochar_C
@@ -294,23 +294,31 @@ class Humidifier(SanUnit):
         mixture
     '''
     
-    def __init__(self, ID='', ins=None, outs=(), thermo=None, init_with='WasteStream'):
+    def __init__(self, ID='', ins=None, outs=(), thermo=None, init_with='WasteStream', set_moisture = 0.8):
         
         SanUnit.__init__(self, ID, ins, outs, thermo, init_with)
+        
+        self.set_moisture = set_moisture
 
     _N_ins = 3
     _N_outs = 1
         
     def _run(self):
-        
+        if self.set_moisture > 1:
+            raise Exception("Moisture content cannot be >1 (above 100%)")
+    
         feedstock, makeup, recycle = self.ins
         mixture = self.outs[0]
         
-        makeup.imass['H2O'] = max(0, 0.8*(feedstock.F_mass - feedstock.imass['H2O']) - feedstock.imass['H2O'])
+        makeup.imass['H2O'] = max(0, self.set_moisture*(feedstock.F_mass - feedstock.imass['H2O']) - feedstock.imass['H2O'])
         
-        recycle.imass['H2O'] = (feedstock.F_mass - feedstock.imass['H2O'])/0.2 - feedstock.F_mass - makeup.imass['H2O']
+        recycle.imass['H2O'] = (feedstock.F_mass - feedstock.imass['H2O'])/(1-self.set_moisture) - feedstock.F_mass - makeup.imass['H2O']
 
         mixture.mix_from(self.ins)
+        
+    @property
+    def set_moisture_lvl(self):
+        return self.set_moisture
 
 # =============================================================================
 # Struvite Precipitation
@@ -399,8 +407,10 @@ class StruvitePrecipitation(Reactor):
             neutral_OH_mol = 10**(-old_pH)*self.ins[0].F_mass # ignore solid volume
             to_target_pH = 10**(self.target_pH - 14)*self.ins[0].F_mass # ignore solid volume
             total_OH = neutral_OH_mol + to_target_pH # unit: mol/h
-            base.imass['MgO'] = total_OH/2 * 40.3044/1000
-            
+            #base.imass['MgO'] = total_OH/2 * 40.3044/1000
+            base.imass['MgO'] = 0 # set to this value because we assume post-HTL pH is above 9 - use line above if not true (AJK)
+            #TODO remove  MgO if NaOH is added - assuming target pH is low enough
+            ##note - target pH is 9, all reactions are above this value, thus MgO is not needed
             supply_MgCl2.imass['MgCl2'] = max((mixture.imass['P']/30.973762*self.Mg_P_ratio -\
                                             base.imass['MgO']/40.3044)*95.211, 0)
     
@@ -590,7 +600,11 @@ class WWTP(SanUnit):
         sludge.imass['Sludge_lignin'] = sludge_afdw*self.sludge_afdw_lignin
 
         treated.imass['H2O'] = ww.F_mass - sludge.F_mass
-    
+
+    @property
+    def sludge_moisture_lvl(self):
+        return self.sludge_moisture
+
     @property
     def sludge_dw_protein(self):
         return self.sludge_afdw_protein*(1-self.sludge_dw_ash)
