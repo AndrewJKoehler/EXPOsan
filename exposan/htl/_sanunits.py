@@ -408,9 +408,13 @@ class StruvitePrecipitation(Reactor):
             to_target_pH = 10**(self.target_pH - 14)*self.ins[0].F_mass # ignore solid volume
             total_OH = neutral_OH_mol + to_target_pH # unit: mol/h
             #base.imass['MgO'] = total_OH/2 * 40.3044/1000
-            base.imass['MgO'] = 0 # set to this value because we assume post-HTL pH is above 9 - use line above if not true (AJK)
-            #TODO remove  MgO if NaOH is added - assuming target pH is low enough
-            ##note - target pH is 9, all reactions are above this value, thus MgO is not needed
+            self.HTL = self.ins[0]._source.ins[0]._source
+            if self.HTL.aqueous_pH >= 9:
+                base.imass['MgO'] = 0 # set to this value because we assume post-HTL pH is above 9 - use line above if not true (AJK)
+                #TODO remove  MgO if NaOH is added - assuming target pH is low enough
+                ##note - target pH is 9, all reactions are above this value, thus MgO is not needed
+            else:
+                base.imass['MgO'] = total_OH/2 * 40.3044/1000
             supply_MgCl2.imass['MgCl2'] = max((mixture.imass['P']/30.973762*self.Mg_P_ratio -\
                                             base.imass['MgO']/40.3044)*95.211, 0)
     

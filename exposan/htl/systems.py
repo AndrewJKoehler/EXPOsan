@@ -44,7 +44,8 @@ __all__ = ('create_system',)
 
 def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinetics",
                   capacity=100,rxn_time_value=60, rxn_temp_value=350, set_moisture = 0.8,
-                  NaOH_mol_value=3, waste_cost=0, waste_GWP=0, high_IRR=False):
+                  NaOH_mol_value=3, waste_cost=0, waste_GWP=0, high_IRR=False, HCl_neutralize=False):
+
 #TODO: add true/false statement for kinetics, user has to select Kinetics or MCA
 #TODO: change lipids and proteins based on average (Jan 23, 2024)
 #TODO: find values for sludge and biosolids - CITE SOURCES (Jan 30, 2024)
@@ -193,14 +194,23 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
     # unit conversion: https://www.unitsconverters.com/en/Btu(It)/Hmft2mdegf-To-W/M2mk/Utu-4404-4398
     H1.register_alias('H1')
 #TODO once new name, kinetics = true, call kinetics, if false, call MCA (old HTL) 
+  
+    # HCl_Tank = qsu.StorageTank('T200', ins='HCl', outs=('HCl_out'),
+    #                          init_with='WasteStream', tau=24, vessel_material='Stainless steel')
+    # HCl_Tank.ins[0].price = 1.078  # https://www.nrel.gov/docs/fy24osti/87099.pdf
+    # #TODO change price of HCl
+    # HCl_Tank.register_alias('HCl_Tank')
+    
     if HTLmodel == 'MCA':    
-        HTL = qsu.HydrothermalLiquefactionMCA('A120', ins=(H1-0,'NAOH_in', 'PFAS_in'), outs=('hydrochar','HTL_aqueous','biocrude','offgas_HTL'),
-                                           mositure_adjustment_exist_in_the_system=True, NaOH_mol = NaOH_mol_value, rxn_time = rxn_time_value, rxn_temp = rxn_temp_value, sludge_moisture = set_moisture)
+        HTL = qsu.HydrothermalLiquefactionMCA('A120', ins=(H1-0,'NAOH_in', 'PFAS_in', 'HCl'), outs=('hydrochar','HTL_aqueous','biocrude','offgas_HTL'),
+                                           mositure_adjustment_exist_in_the_system=True, NaOH_mol = NaOH_mol_value, rxn_time = rxn_time_value, rxn_temp = rxn_temp_value, sludge_moisture = set_moisture, HCl_neut = HCl_neutralize)
     elif HTLmodel == 'Kinetics':    
-        HTL = qsu.HydrothermalLiquefactionKinetics('A120', ins=(H1-0,'NAOH_in', 'PFAS_in'), outs=('hydrochar','HTL_aqueous','biocrude','offgas_HTL'),
-                                           mositure_adjustment_exist_in_the_system=True, NaOH_mol = NaOH_mol_value, feedstock = feedstock, rxn_time = rxn_time_value, rxn_temp = rxn_temp_value)
-        
+        HTL = qsu.HydrothermalLiquefactionKinetics('A120', ins=(H1-0,'NAOH_in', 'PFAS_in', 'HCl'), outs=('hydrochar','HTL_aqueous','biocrude','offgas_HTL'),
+                                           mositure_adjustment_exist_in_the_system=True, NaOH_mol = NaOH_mol_value, feedstock = feedstock, rxn_time = rxn_time_value, rxn_temp = rxn_temp_value, HCl_neut = HCl_neutralize)
+
+ 
     HTL.ins[1].price =0.517 #include source, lists price per kg of NaOH
+    HTL.ins[3].price =1.078 #include source, lists price per kg of HCl     
     HTL.register_alias('HTL')
     
     # =============================================================================
@@ -228,7 +238,7 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
         M1_outs1 = ''
     else:
         AcidEx = su.AcidExtraction('A200', ins=(HTL-0, SP1-0),
-                                   outs=('residual','extracted'))
+                                    outs=('residual','extracted'))
         AcidEx.register_alias('AcidEx')
         # AcidEx.outs[0].price = -0.055 # SS 2021 SOT PNNL report page 24 Table 9
         # not include residual for TEA and LCA for now
@@ -238,7 +248,8 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
     M1.register_alias('M1')
     
     StruPre = su.StruvitePrecipitation('A220', ins=(M1-0,'MgCl2','NH4Cl','MgO'),
-                                       outs=('struvite','CHG_feed'))
+                                        outs=('struvite','CHG_feed'))
+    
     StruPre.ins[1].price = 0.5452
     StruPre.ins[2].price = 0.13
     StruPre.ins[3].price = 0.2

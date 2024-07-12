@@ -189,6 +189,9 @@ def create_components(set_thermo=True):
     H2SO4 = Component('H2SO4', phase='l', particle_size='Soluble',
                       degradability='Undegradable', organic=False)
     
+    HCl = Component('HCl', phase='l', particle_size='Soluble',
+                      degradability='Undegradable', organic=False)
+    
     H3PO4 = Component('H3PO4', phase='l', particle_size='Soluble',
                       degradability='Undegradable', organic=False)
     
@@ -368,23 +371,27 @@ def create_components(set_thermo=True):
 
     C30H62 = Component('C30H62', search_ID='638-68-6', particle_size='Soluble',
                       degradability='Slowly', organic=True)
+
+
+    # PFOS, PFHxS values taken from Sludge Protein
     
     #PFAS
-    PFOS = Component('C8HF17O3S', search_ID='1763-23-1', phase='s', particle_size='Soluble',
+    PFOS = Component('C8HF17O3S', search_ID='1763-23-1', phase='l', particle_size='Particulate',
                      degradability='Undegradable', organic=True)
     add_V_from_rho(PFOS, 1800)
+    PFOS.mu.add_model(6000)
     
 #TODO double check value
-    PFOA = Component('C8HF15O2', search_ID='335-67-1', phase='s', particle_size='Soluble',
+    PFOA = Component('C8HF15O2', search_ID='335-67-1', phase='l', particle_size='Particulate',
                      degradability='Undegradable', organic=True)
     
-    PFHxS = Component('C6HF13O3S', search_ID='355-46-4', phase='s', particle_size='Soluble',
+    PFHxS = Component('C6HF13O3S', search_ID='355-46-4', phase='l', particle_size='Particulate',
                     degradability='Undegradable', organic=True)    
     add_V_from_rho(PFHxS, 1841)
+    PFHxS.mu.add_model(6000)
     
-    PFHxA = Component('C6HF11O2', search_ID='307-24-4', phase='s', particle_size='Soluble',
+    PFHxA = Component('C6HF11O2', search_ID='307-24-4', phase='l', particle_size='Particulate',
                       degradability='Undegradable', organic=True)
-
   
 
     Gasoline = Component('Gasoline', search_ID='544-76-3', phase='l', particle_size='Soluble',
@@ -420,7 +427,7 @@ def create_components(set_thermo=True):
     cmps = Components([Sludge_lipid, Sludge_protein, Sludge_carbo, Sludge_ash, Sludge_lignin,
                        Struvite, Hydrochar, Residual, Biocrude, HTLaqueous, H2O,
                        C, N, P, O2, N2, CH4, C2H6, C3H8, CO2, CO, H2, NH3,
-                       H2SO4, H3PO4, MgCl2, MgO, NaOH, NH42SO4, NH4Cl, C4H10,
+                       H2SO4, HCl, H3PO4, MgCl2, MgO, NaOH, NH42SO4, NH4Cl, C4H10,
                        TWOMBUTAN, NPENTAN, TWOMPENTA, CYCHEX, HEXANE, TWOMHEXAN,
                        HEPTANE, CC6METH, PIPERDIN, TOLUENE, THREEMHEPTA, OCTANE,
                        ETHCYC6, ETHYLBEN, OXYLENE, C9H20, PROCYC6, C3BENZ,
