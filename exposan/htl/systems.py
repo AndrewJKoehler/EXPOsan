@@ -194,22 +194,23 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
     # unit conversion: https://www.unitsconverters.com/en/Btu(It)/Hmft2mdegf-To-W/M2mk/Utu-4404-4398
     H1.register_alias('H1')
   
-    HCl_Tank = qsu.StorageTank('T200', ins='HCl', outs=('HCl_out'),
+    HCl_Tank = qsu.StorageTank('T100', ins='HCl', outs=('HCl_out'),
                               init_with='WasteStream', tau=24, vessel_material='Stainless steel')
-    HCl_Tank.ins[0].price = 1.078  # https://www.nrel.gov/docs/fy24osti/87099.pdf
     #TODO change price of HCl
+    HCl_Tank.ins[0].price = 1.078 # https://www.nrel.gov/docs/fy24osti/87099.pdf
     HCl_Tank.register_alias('HCl_Tank')
     
+    # create a NaOH stream as 'WasteStream' to enable LCA (this is a fake unit with no construction)
+    NaOH_WS = su.preWSConverter('S100', ins='NaOH_assumed', outs=('NaOH_out'), init_with='WasteStream')
+    NaOH_WS.ins[0].price = 0.517 #include source, lists price per kg of NaOH  
+    NaOH_WS.register_alias('NaOH_WS')
+    
     if HTLmodel == 'MCA':    
-        HTL = qsu.HydrothermalLiquefactionMCA('A120', ins=(H1-0,'NaOH_in', 'PFAS_in', HCl_Tank-0), outs=('hydrochar','HTL_aqueous','biocrude','offgas_HTL'),
+        HTL = qsu.HydrothermalLiquefactionMCA('A120', ins=(H1-0, NaOH_WS-0, 'PFAS_in', HCl_Tank-0), outs=('hydrochar','HTL_aqueous','biocrude','offgas_HTL'),
                                         mositure_adjustment_exist_in_the_system=True, NaOH_mol = NaOH_mol_value, rxn_time = rxn_time_value, rxn_temp = rxn_temp_value, sludge_moisture = set_moisture, HCl_neut = HCl_neutralize)
     elif HTLmodel == 'Kinetics':    
-        HTL = qsu.HydrothermalLiquefactionKinetics('A120', ins=(H1-0,'NaOH_in', 'PFAS_in', HCl_Tank-0), outs=('hydrochar','HTL_aqueous','biocrude','offgas_HTL'),
+        HTL = qsu.HydrothermalLiquefactionKinetics('A120', ins=(H1-0, NaOH_WS-0, 'PFAS_in', HCl_Tank-0), outs=('hydrochar','HTL_aqueous','biocrude','offgas_HTL'),
                                         mositure_adjustment_exist_in_the_system=True, NaOH_mol = NaOH_mol_value, feedstock = feedstock, rxn_time = rxn_time_value, rxn_temp = rxn_temp_value, HCl_neut = HCl_neutralize)
-
- 
-    HTL.ins[1].price =0.517 #include source, lists price per kg of NaOH
-    # HTL.ins[3].price =1.078 #include source, lists price per kg of HCl     
     HTL.register_alias('HTL')
     
     # =============================================================================
@@ -270,6 +271,7 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
     
     MemDis = qsu.MembraneDistillation('A260', ins=(F1-1, SP1-1, 'NaOH', 'Membrane_in'),
                                   outs=('ammonium_sulfate','MemDis_ww','Membrane_out','solution'), init_with='WasteStream')
+    # TODO: update the NaOH price here to be consistent with the NaOH in HTL
     MemDis.ins[2].price = 0.5256
     MemDis.outs[0].price = 0.3236
     MemDis.register_alias('MemDis')
@@ -575,18 +577,31 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
                         NonCarcinogenics=13.228,
                         RespiratoryEffects=0.0024543)
     
-    # #HTL_NaOH
-    # qs.StreamImpactItem(ID='NaOH_item',
-    #                     linked_stream=stream.NaOH_in,
-    #                     Acidification=0.33656,
-    #                     Ecotoxicity=0.77272,
-    #                     Eutrophication=0.00032908,
-    #                     GlobalWarming=1.2514,
-    #                     OzoneDepletion=7.89E-07,
-    #                     PhotochemicalOxidation=0.0033971,
-    #                     Carcinogenics=0.0070044,
-    #                     NonCarcinogenics=13.228,
-    #                     RespiratoryEffects=0.0024543)   
+    # HTL_NaOH
+    qs.StreamImpactItem(ID='NaOH_HTL_item',
+                        linked_stream=stream.NaOH_assumed,
+                        Acidification=0.33656,
+                        Ecotoxicity=0.77272,
+                        Eutrophication=0.00032908,
+                        GlobalWarming=1.2514,
+                        OzoneDepletion=7.89E-07,
+                        PhotochemicalOxidation=0.0033971,
+                        Carcinogenics=0.0070044,
+                        NonCarcinogenics=13.228,
+                        RespiratoryEffects=0.0024543)
+    
+    # HTL_HCl
+    qs.StreamImpactItem(ID='HCl_HTL_item',
+                        linked_stream=stream.HCl,
+                        Acidification=0.29714091,
+                        Ecotoxicity=0.84142564,
+                        Eutrophication=0.000223493,
+                        GlobalWarming=0.87300274,
+                        OzoneDepletion=3.47E-07,
+                        PhotochemicalOxidation=0.002336711,
+                        Carcinogenics=0.01270564,
+                        NonCarcinogenics=15.248377,
+                        RespiratoryEffects=0.001994018)  
     
     qs.StreamImpactItem(ID='RO_item',
                         linked_stream=stream.Membrane_in,

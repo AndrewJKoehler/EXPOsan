@@ -29,6 +29,7 @@ __all__ = (
     'StruvitePrecipitation',
     'WWmixer',
     'WWTP',
+    'preWSConverter'
     )
 
 yearly_operation_hour = 7920 # Jones
@@ -460,7 +461,7 @@ class StruvitePrecipitation(Reactor):
 
 class WWmixer(SanUnit):
     '''
-    A fake unit that mix all wastewater streams and calculates C, N, P, and H2O
+    A fake unit that mixes all wastewater streams and calculates C, N, P, and H2O
     amount.
     Parameters
     ----------
@@ -681,3 +682,32 @@ class WWTP(SanUnit):
     @property
     def H_C_eff(self):
         return (self.sludge_H/1.00784-2*self.sludge_O/15.999)/self.sludge_C*12.011
+
+# =============================================================================
+# WSConverter
+# =============================================================================
+
+class preWSConverter(SanUnit):
+    '''
+    A fake unit that enables LCA. This unit must be added before the converted stream.
+    
+    Parameters
+    ----------
+    ins : Iterable(stream)
+        inlet
+    outs : Iterable(stream)
+        outlet
+    '''
+    _N_ins = 1
+    _N_outs = 1
+    
+    def __init__(self, ID='', ins=None, outs=(), thermo=None, init_with='WasteStream'):
+        
+        SanUnit.__init__(self, ID, ins, outs, thermo, init_with)
+        
+    def _run(self):
+        
+        inlet = self.ins[0]
+        outlet = self.outs[0]
+        
+        inlet.copy_like(outlet)
