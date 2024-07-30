@@ -70,6 +70,7 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
         elif feedstock == 'biosolid':
             sludge_afdw_lignin_content=0.02
         
+
     configuration = configuration or 'baseline'
     if configuration not in ('baseline','no_P','PSA'):
         raise ValueError('`configuration` can only be "baseline", '
@@ -120,6 +121,7 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
                         sludge_afdw_lignin=sludge_afdw_lignin_content,
                         sludge_afdw_protein=sludge_afdw_protein_content,
                         N_2_P=N_2_P_value, operation_hours=7920)   
+
     WWTP.register_alias('WWTP')
     
     raw_wastewater.price = -WWTP.ww_2_dry_sludge*waste_cost/3.79/(10**6)
@@ -501,7 +503,7 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
     #                     NonCarcinogenics=0.009977,
     #                     RespiratoryEffects=0.00000068933)
     
-    
+
     # biocrude upgrading
     qs.StreamImpactItem(ID='H2_item',
                         linked_stream=stream.H2,
@@ -631,7 +633,7 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
     qs.StreamImpactItem(ID='NH4Cl_item',
                         linked_stream=stream.NH4Cl,
                         Acidification=0.34682,
-                        Ecotoxicity=0.90305, 
+                        Ecotoxicity=0.90305,
                         Eutrophication=0.0047381,
                         GlobalWarming=1.525,
                         OzoneDepletion=9.22E-08,
