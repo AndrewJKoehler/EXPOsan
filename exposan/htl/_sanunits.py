@@ -16,10 +16,11 @@ for license details.
 '''
 
 # import biosteam as bst
-from math import ceil, log
+from math import ceil, log, pi
 from qsdsan import SanUnit
 from qsdsan.sanunits import Reactor
-from qsdsan.utils import auom
+from qsdsan.utils import ospath, auom, data_path, load_data
+from qsdsan.processes import Decay
 
 __all__ = (
     'AcidExtraction',
@@ -35,6 +36,173 @@ __all__ = (
 yearly_operation_hour = 7920 # Jones
 _m3perh_to_MGD = auom('m3/h').conversion_factor('MGD')
 
+# =============================================================================
+# Anaerobic Digestion
+# =============================================================================
+
+ad_path = ospath.join(data_path, 'sanunit_data/_anaerobic_digestion.tsv')
+
+class AnaerobicDigestion(SanUnit, Decay):
+    '''
+    Anaerobic digestion of wastes with the production of biogas based on
+    `Trimmer et al. <https://doi.org/10.1021/acs.est.0c03296>`_
+
+    To enable life cycle assessment, the following impact items should be pre-constructed:
+    `Concrete`, `Excavation`.
+
+    Cost is calculated by the unit cost of the impact items and their quantities.
+
+    Parameters
+    ----------
+    ins : Iterable
+        Waste for treatment.
+    outs : Iterable
+        Treated waste, captured biogas, fugitive CH4, and fugitive N2O.
+    flow_rate : float
+        Total flow rate through the reactor (for sizing purpose), [m3/d].
+        If not provided, will use F_vol_in.
+
+    Examples
+    --------
+    `bwaise systems <https://github.com/QSD-Group/EXPOsan/blob/main/exposan/bwaise/systems.py>`_
+
+    References
+    ----------
+    [1] Trimmer et al., Navigating Multidimensional Social–Ecological System
+    Trade-Offs across Sanitation Alternatives in an Urban Informal Settlement.
+    Environ. Sci. Technol. 2020, 54 (19), 12641–12653.
+    https://doi.org/10.1021/acs.est.0c03296.
+
+    See Also
+    --------
+    :ref:`qsdsan.processes.Decay <processes_Decay>`
+    '''
+    _N_ins = 1
+    _N_outs = 4
+    _run = Decay._first_order_run
+    _units = {
+        'Volumetric flow rate': 'm3/hr',
+        'Residence time': 'd',
+        'Single reactor volume': 'm3',
+        'Reactor diameter': 'm',
+        'Reactor height': 'm'
+        }
+
+    def __init__(self, ID='', ins=None, outs=(), thermo=None, init_with='WasteStream',
+                 include_construction=True,
+                 flow_rate=None, degraded_components=('OtherSS',),
+                 if_capture_biogas=True, if_N2O_emission=False,
+                 **kwargs):
+        Decay.__init__(self, ID, ins, outs, thermo, init_with, F_BM_default=1,
+                        include_construction=include_construction,
+                        degraded_components=degraded_components,
+                        if_capture_biogas=if_capture_biogas,
+                        if_N2O_emission=if_N2O_emission,)
+        self._flow_rate = flow_rate
+
+        data = load_data(path=ad_path)
+        for para in data.index:
+            value = float(data.loc[para]['expected'])
+            setattr(self, '_'+para, value)
+        del data
+
+        for attr, value in kwargs.items():
+            setattr(self, attr, value)
+### Commented out because LCA not desired for construction - consider turning on
+### if LCA for heat/energy use not accounted for
+###Note: if later turned on, Self.construction must still be deleted
+    # def _init_lca(self):
+    #     self.construction = [
+    #         Construction('concrete', linked_unit=self, item='Concrete', quantity_unit='m3'),
+    #         Construction('excavation', linked_unit=self, item='Excavation', quantity_unit='m3'),
+    #         ]
+    def _run(self):  pass
+    
+
+
+    def _design(self):
+        design = self.design_results
+        design['Volumetric flow rate'] = Q = self.flow_rate
+        design['Residence time'] = tau = self.tau
+        design['Reactor number'] = N = self.N_reactor
+        V_tot = Q * tau*24
+
+        # One extra as a backup
+        design['Single reactor volume'] = V_single = V_tot/(1-self.headspace_frac)/(N-1)
+
+        # Rx modeled as a cylinder
+        design['Reactor diameter'] = D = (4*V_single*self.aspect_ratio/pi)**(1/3)
+        design['Reactor height'] = H = self.aspect_ratio * D
+
+        if self.include_construction:
+            constr = self.construction
+            concrete =  N*self.concrete_thickness*(2*pi/4*(D**2)+pi*D*H)
+            constr[0].quantity = concrete
+            constr[1].quantity = V_tot # excavation
+
+            self.add_construction()
+    
+
+    @property
+    def flow_rate(self):
+        '''
+        [float] Total flow rate through the reactor (for sizing purpose), [m3/d].
+        If not provided, will calculate based on F_vol_in.
+        '''
+        return self._flow_rate if self._flow_rate else self.F_vol_in*24
+    @flow_rate.setter
+    def flow_rate(self, i):
+        self._flow_rate = i
+
+    @property
+    def tau(self):
+        '''[float] Residence time, [d].'''
+        return self._tau
+    @tau.setter
+    def tau(self, i):
+        self._tau = i
+
+    @property
+    def COD_removal(self):
+        '''[float] Fraction of COD removed during treatment.'''
+        return self._COD_removal
+    @COD_removal.setter
+    def COD_removal(self, i):
+        self._COD_removal = i
+
+    @property
+    def N_reactor(self):
+        '''[int] Number of reactors, float will be converted to the smallest integer.'''
+        return self._N_reactor
+    @N_reactor.setter
+    def N_reactor(self, i):
+        self._N_reactor = ceil(i)
+
+    @property
+    def aspect_ratio(self):
+        '''[float] Diameter-to-height ratio of the reactor.'''
+        return self._aspect_ratio
+    @aspect_ratio.setter
+    def aspect_ratio(self, i):
+        self._aspect_ratio = i
+
+    @property
+    def headspace_frac(self):
+        '''[float] Fraction of the reactor volume for headspace gas.'''
+        return self._headspace_frac
+    @headspace_frac.setter
+    def headspace_frac(self, i):
+        self._headspace_frac = i
+
+    @property
+    def concrete_thickness(self):
+        '''[float] Thickness of the concrete wall.'''
+        return self._concrete_thickness
+    @concrete_thickness.setter
+    def concrete_thickness(self, i):
+        self._concrete_thickness = i
+
+                         
 # =============================================================================
 # Acid Extraction
 # =============================================================================
@@ -545,7 +713,7 @@ class WWTP(SanUnit):
         https://doi.org/10.1039/C6GC03294J.
     '''
     _N_ins = 1
-    _N_outs = 2
+    _N_outs = 3
 
     def __init__(self, ID='', ins=None, outs=(), thermo=None,
                  init_with='WasteStream', 
@@ -561,6 +729,7 @@ class WWTP(SanUnit):
                  carbo_2_H=0.067, 
                  protein_2_N=0.159,
                  N_2_P=0.3927,
+                 feedstock='sludge',
                  operation_hours=yearly_operation_hour):
         
         SanUnit.__init__(self, ID, ins, outs, thermo, init_with)
@@ -579,11 +748,12 @@ class WWTP(SanUnit):
         self.protein_2_N = protein_2_N
         self.N_2_P = N_2_P
         self.operation_hours = operation_hours
+        self.feedstock = feedstock
     
     def _run(self):
         
         ww = self.ins[0]
-        sludge, treated = self.outs
+        sludge, treated, methane = self.outs
 #TODO ask Jianan if lignin should be included
         self.sludge_afdw_carbo = round(1 - self.sludge_afdw_protein - self.sludge_afdw_lipid, 5)   
         
@@ -597,14 +767,28 @@ class WWTP(SanUnit):
 
         sludge.imass['H2O'] = self.sludge_dw/(1-self.sludge_moisture)*self.sludge_moisture
         sludge.imass['Sludge_ash'] = self.sludge_dw*self.sludge_dw_ash
-
+#TODO if feedstock == 'biosolid':
         sludge_afdw = self.sludge_dw*(1 - self.sludge_dw_ash)
+
+
+#### anaerobic digestion        
+        if self.feedstock == 'biosolid':
+            Vss_reduction = 0.385664 #value = loss of VSS, average from lit, see excel           
+            methane.imass['CH4'] =  sludge_afdw * Vss_reduction * 0.178108571 * 0.7513 #L methane/kg Vss, methane density kg methane/L of methane
+            sludge_afdw = sludge_afdw * (1-Vss_reduction)
+            #TODO add heatloss to system
+            #TODO update these values with Metcalfe and Eddy values
+        else:
+            methane.imass['CH4'] = 0
+        #methane.imass['CH4'] =  sludge_afdw        
+        
         sludge.imass['Sludge_lipid'] = sludge_afdw*self.sludge_afdw_lipid
         sludge.imass['Sludge_protein'] = sludge_afdw*self.sludge_afdw_protein
         sludge.imass['Sludge_carbo'] = sludge_afdw*self.sludge_afdw_carbo
         sludge.imass['Sludge_lignin'] = sludge_afdw*self.sludge_afdw_lignin
-
+        
         treated.imass['H2O'] = ww.F_mass - sludge.F_mass
+
 
     @property
     def sludge_moisture_lvl(self):
@@ -682,6 +866,10 @@ class WWTP(SanUnit):
     @property
     def H_C_eff(self):
         return (self.sludge_H/1.00784-2*self.sludge_O/15.999)/self.sludge_C*12.011
+
+
+
+
 
 # =============================================================================
 # WSConverter

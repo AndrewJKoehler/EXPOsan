@@ -28,7 +28,7 @@ References:
     https://doi.org/10.2172/1111191.
 '''
 
-import os, qsdsan as qs
+import os, qsdsan as qs, biosteam as bst
 from qsdsan import sanunits as qsu
 from biosteam.units import IsenthalpicValve
 from qsdsan.utils import clear_lca_registries
@@ -50,7 +50,7 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
 #TODO: change lipids and proteins based on average (Jan 23, 2024)
 #TODO: find values for sludge and biosolids - CITE SOURCES (Jan 30, 2024)
 
-    if feedstock == 'sludge':
+    if feedstock == 'sludge': #from Snowden Swann PNNL 2022~ state of tech SOP
         sludge_moisture_content=0.8 #TODO investigate raising to ~0.97
         sludge_dw_ash_content=0.257
         sludge_afdw_lipid_content=0.204
@@ -103,23 +103,25 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
     # pretreatment (Area 000)
     # =============================================================================
     if HTLmodel == 'MCA':             
-        WWTP = su.WWTP('S000', ins=raw_wastewater, outs=('sludge','treated_water'),
+        WWTP = su.WWTP('S000', ins=raw_wastewater, outs=('sludge','treated_water','methane'),
                        ww_2_dry_sludge=1,
                        # how much metric ton/day sludge can be produced by 1 MGD of ww
                        sludge_moisture=sludge_moisture_content,
                        sludge_dw_ash=sludge_dw_ash_content, 
                        sludge_afdw_lipid=sludge_afdw_lipid_content,
                        sludge_afdw_protein=sludge_afdw_protein_content,
+                       feedstock = feedstock,
                        N_2_P=N_2_P_value, operation_hours=7920)
     
     elif HTLmodel == 'Kinetics':
-        WWTP = su.WWTP('S000', ins=raw_wastewater, outs=('sludge','treated_water'),
+        WWTP = su.WWTP('S000', ins=raw_wastewater, outs=('sludge','treated_water','methane'),
                         ww_2_dry_sludge=1,
                         # how much metric ton/day sludge can be produced by 1 MGD of ww
                         sludge_moisture=sludge_moisture_content, sludge_dw_ash=sludge_dw_ash_content, 
                         sludge_afdw_lipid=sludge_afdw_lipid_content, 
                         sludge_afdw_lignin=sludge_afdw_lignin_content,
                         sludge_afdw_protein=sludge_afdw_protein_content,
+                        feedstock = feedstock,
                         N_2_P=N_2_P_value, operation_hours=7920)   
 
     WWTP.register_alias('WWTP')
@@ -129,9 +131,21 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
     # =============================================================================
     # Anaerobic Digester (Area 050)
     # =============================================================================    
+    #### simplest iteration:
+        # collect energy and heat requirements for AD based on functional unit
+        #collect gas produced, digestate produced
+        #combine
+  #    if feedstock == 'biosolid':
+          # energy = ###
+          #heat = ###
+          #draw from central heating and power
+          #methane production = blank
+          #biosolid production = X or Y
+    
+    
     
 #    if feedstock == 'biosolid':
-#        AD1 = qsu.
+#        AD1 = su.AnaerobicDigestion
 # TODO determine which of the sanunits within _anaerobic_reactor.py should be used
 #TODO evaluate if it is necessary to use a sanunit - what is the desired goal?
 #Do we want to know how the sludge components change? Or do we just want the system LCA/cost/biogas production and fugu
@@ -442,7 +456,7 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
     
     DieselTank.outs[0].price = 0.9722
     
-    GasMixer = qsu.Mixer('S580', ins=(HTL-3, F1-0, F2-0, D1-0, F3-0),
+    GasMixer = qsu.Mixer('S580', ins=(WWTP-2, HTL-3, F1-0, F2-0, D1-0, F3-0),
                           outs=('fuel_gas'), init_with='Stream')
     GasMixer.register_alias('GasMixer')
     
@@ -467,6 +481,8 @@ def create_system(configuration='baseline',feedstock='sludge', HTLmodel = "Kinet
                                 outs=('emission','solid_ash'), init_with='WasteStream',
                                 supplement_power_utility=False)
     CHP.ins[1].price = 0.1685
+    
+    CT = bst.facilities.CoolingTower(ID='CT')
     
     sys = qs.System.from_units(
         f'sys_{configuration}',
