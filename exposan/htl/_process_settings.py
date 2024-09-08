@@ -27,15 +27,15 @@ import biosteam as bst, qsdsan as qs
 __all__ = ('_load_process_settings',)
 
 def _load_process_settings():
-# =============================================================================
-#     add a heating agent
-# =============================================================================
+    # =========================================================================
+    # add a heating agent
+    # =========================================================================
     # use DOWTHERM(TM) A Heat Transfer Fluid (HTF) as the heating agent
     # DOWTHERM(TM) A HTF = 73.5% diphenyl oxide (DPO) + 26.5% Biphenyl (BIP)
     # critical temperature for HTF: 497 C
     # critical pressure for HTF: 313.4 kPa
     # https://www.dow.com/en-us/pdp.dowtherm-a-heat-transfer-fluid.238000z.\
-    # html#tech-content (accessed 11-16-2022)
+    # html#tech-content (accessed 2022-11-16)
     
     DPO_chem = qs.Chemical('DPO_chem', search_ID='101-84-8')
     BIP_chem = qs.Chemical('BIP_chem', search_ID='92-52-4')
@@ -59,17 +59,12 @@ def _load_process_settings():
     # engineering-manual.pdf?iframe=true (accessed on 11-16-2022)
     bst.HeatUtility.heating_agents.append(HTF)
 
-    bst.CE = qs.CEPCI_by_year[2020] # use 2020$ to match up with latest PNNL report
+    # TODO: confirm with Andrew
+    bst.CE = qs.CEPCI_by_year[2022]
     
-# =============================================================================
-#     set utility prices
-# =============================================================================
-    bst.PowerUtility.price = 0.06879 # !!! the electricity price can be adjusted here
-    
-    # # These utilities are provided by CHP thus cost already considered
-    # # setting the regeneration price to 0 or not will not affect the final results
-    # # as the utility cost will be positive for the unit that consumes it
-    # # but negative for HXN/CHP as they produce it
-    # for adj in ('low', 'medium', 'high'):
-    #     steam = bst.HeatUtility.get_agent(f'{adj}_pressure_steam')
-    #     steam.heat_transfer_price = steam.regeneration_price = 0.
+    # =========================================================================
+    # set utility prices
+    # =========================================================================
+    # TODO: confirm with Andrew the cost baseline year
+    # 2022 US average industrial electricity price
+    bst.PowerUtility.price = 0.0832

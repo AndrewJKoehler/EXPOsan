@@ -370,33 +370,31 @@ def create_components(set_thermo=True):
     C26H42O4 = Component('C26H42O4', search_ID='27554-26-3',
                          particle_size='Soluble', degradability='Slowly',
                          organic=True)
-    # use C24H38O4 to replace since they are similar
 
     C30H62 = Component('C30H62', search_ID='638-68-6', particle_size='Soluble',
                       degradability='Slowly', organic=True)
-
-
-    # PFOS, PFHxS values taken from Sludge Protein
     
-    #PFAS
-    PFOS = Component('C8HF17O3S', search_ID='1763-23-1', phase='l', particle_size='Particulate',
-                     degradability='Undegradable', organic=True)
+    # PFAS (PFOS, PFHxS values taken from Sludge_protein)
+    PFOS = Component('C8HF17O3S', search_ID='1763-23-1', phase='l',
+                     particle_size='Particulate', degradability='Undegradable',
+                     organic=True)
     add_V_from_rho(PFOS, 1800)
     PFOS.mu.add_model(6000)
     
-#TODO double check value
-    PFOA = Component('C8HF15O2', search_ID='335-67-1', phase='l', particle_size='Particulate',
-                     degradability='Undegradable', organic=True)
+    PFOA = Component('C8HF15O2', search_ID='335-67-1', phase='l',
+                     particle_size='Particulate', degradability='Undegradable',
+                     organic=True)
     
-    PFHxS = Component('C6HF13O3S', search_ID='355-46-4', phase='l', particle_size='Particulate',
-                    degradability='Undegradable', organic=True)    
+    PFHxS = Component('C6HF13O3S', search_ID='355-46-4', phase='l',
+                      particle_size='Particulate', degradability='Undegradable',
+                      organic=True)    
     add_V_from_rho(PFHxS, 1841)
     PFHxS.mu.add_model(6000)
     
-    PFHxA = Component('C6HF11O2', search_ID='307-24-4', phase='l', particle_size='Particulate',
-                      degradability='Undegradable', organic=True)
-  
-
+    PFHxA = Component('C6HF11O2', search_ID='307-24-4', phase='l',
+                      particle_size='Particulate', degradability='Undegradable',
+                      organic=True)
+    
     Gasoline = Component('Gasoline', search_ID='544-76-3', phase='l', particle_size='Soluble',
                          degradability='Slowly', organic=True)
     # Gasoline copies C16H34, do not need to be precise, since Gasoline is just used to calculte fuel production amount
@@ -438,7 +436,7 @@ def create_components(set_thermo=True):
                        C13H28, C14H30, OTTFNA, C6BENZ, OTTFSN, C7BENZ, C8BENZ,
                        C10H16O4, C15H32, C16H34, C17H36, C18H38, C19H40, C20H42,
                        C21H44, TRICOSANE, C24H38O4, C26H42O4, C30H62, PFOS,
-                       PFOA, PFHxA, PFHxS, Gasoline, Diesel, CHG_catalyst,
+                       PFOA, PFHxS, PFHxA, Gasoline, Diesel, CHG_catalyst,
                        HT_catalyst, HC_catalyst, Membrane])
     
     for i in cmps:

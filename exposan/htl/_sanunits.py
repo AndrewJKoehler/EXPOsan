@@ -10,6 +10,8 @@ This module is developed by:
 
     Yalin Li <mailto.yalin.li@gmail.com>
     
+    Andrew Koehler <koehler@mines.edu>
+    
 This module is under the University of Illinois/NCSA Open Source License.
 Please refer to https://github.com/QSD-Group/EXPOsan/blob/main/LICENSE.txt
 for license details.
@@ -218,7 +220,7 @@ class AcidExtraction(Reactor):
     outs : Iterable(stream)
         residual, extracted.
     acid_vol: float
-        0.5 M H2SO4 to hydrochar ratio: mL/g.
+        1 M H2SO4 to hydrochar ratio: mL/g.
     P_acid_recovery_ratio: float
         The ratio of phosphorus that can be extracted.
         
@@ -234,7 +236,7 @@ class AcidExtraction(Reactor):
     _F_BM_default = {**Reactor._F_BM_default}
     
     def __init__(self, ID='', ins=None, outs=(), thermo=None,
-                 init_with='WasteStream', acid_vol=7, P_acid_recovery_ratio=0.8,
+                 init_with='WasteStream', acid_vol=2, P_acid_recovery_ratio=0.8,
                  P=None, tau=2, V_wf=0.8, # tau: [1]
                  length_to_diameter=2, N=1, V=10, auxiliary=False,
                  mixing_intensity=None, kW_per_m3=0, # use MixTank default value
@@ -271,13 +273,12 @@ class AcidExtraction(Reactor):
             if self.HTL.hydrochar_P <= 0:
                 residual.copy_like(hydrochar)
             else: 
-                acid.imass['H2SO4'] = hydrochar.F_mass*self.acid_vol*0.5*98.079/1000
-                # 0.5 M H2SO4 acid_vol (10 mL/1 g) hydrochar
+                acid.imass['H2SO4'] = hydrochar.F_mass*self.acid_vol*1*98.079/1000
+                # 1 M H2SO4 acid_vol (2 mL/1 g) hydrochar
                 acid.imass['H2O'] = hydrochar.F_mass*self.acid_vol*1.05 -\
                                     acid.imass['H2SO4']
                 # 0.5 M H2SO4 density: 1.05 kg/L 
-                # https://www.fishersci.com/shop/products/sulfuric-acid-1n-0-5m-
-                # standard-solution-thermo-scientific/AC124240010 (accessed 10-6-2022)
+                # https://us.vwr.com/store/product/21221349/null (accessed 2024-09-08)
                 
                 residual.imass['Residual'] = hydrochar.F_mass - self.ins[0]._source.\
                                              hydrochar_P*self.P_acid_recovery_ratio
@@ -290,9 +291,8 @@ class AcidExtraction(Reactor):
                 
                 residual.T = extracted.T = hydrochar.T
                 residual.P = hydrochar.P
-                # H2SO4 reacts with hydrochar to release heat and temperature will be
-                # increased mixture's temperature
-                #TODO comment out heat and temperature,
+                # H2SO4 reacts with hydrochar to release heat and temperature will increase
+    
     @property
     def residual_C(self):
         return self.ins[0]._source.hydrochar_C
@@ -420,27 +420,37 @@ class HTLmixer(SanUnit):
         mixture.mix_from(self.ins)
         mixture.empty()
         
-        mixture.imass['C'] = self.ins[0]._source.HTLaqueous_C
-        mixture.imass['N'] = self.ins[0]._source.HTLaqueous_N
-        mixture.imass['P'] = self.ins[0]._source.HTLaqueous_P +\
-                             extracted.imass['P']
+        self.HTL = self.ins[0]._source
+        
+        mixture.imass['C'] = self.HTL.HTLaqueous_C
+        mixture.imass['N'] = self.HTL.HTLaqueous_N
+        mixture.imass['P'] = self.HTL.HTLaqueous_P + extracted.imass['P']
         mixture.imass['H2O'] = HTLaqueous.F_mass + extracted.F_mass -\
                                mixture.imass['C'] - mixture.imass['N'] -\
                                mixture.imass['P']
         # represented by H2O except C, N, P
-        
+    
     @property
     def pH(self):
-        # assume HTLaqueous pH = 9 [1] (9.08 ± 0.30)
-        # extracted pH = 0 (0.5 M H2SO4)
-        # since HTLaqueous pH is near to neutral
-        # assume pH is dominant by extracted and will be calculate based on dilution
-        if self.ins[1].F_mass == 0:
-            return 9
+        HTLaqueous, extracted = self.ins
+        mixture = self.outs[0]
+        
+        base_mol_per_h = HTLaqueous.F_vol*1000*10**(self.HTL.aq_pH-14)
+        acid_mol_per_h = extracted.imass['H2SO4']*1000/98*2
+        
+        volume_L_per_h = mixture.F_vol*1000
+        
+        base_M = base_mol_per_h/volume_L_per_h
+        acid_M = acid_mol_per_h/volume_L_per_h
+        
+        if base_M > acid_M:
+            hydrogen_ion_M = 10**-14/(base_M-acid_M)
+        elif base_M == acid_M:
+            hydrogen_ion_M = 10**(-7)
         else:
-            dilution_factor = self.F_mass_in/self.ins[1].F_mass if self.ins[1].imass['P'] != 0 else 1
-            hydrogen_ion_conc = 10**0/dilution_factor
-            return -log(hydrogen_ion_conc, 10)
+            hydrogen_ion_M = acid_M - base_M
+
+        return -log(hydrogen_ion_M, 10)
 
 # =============================================================================
 # Humidifier
@@ -448,12 +458,7 @@ class HTLmixer(SanUnit):
 
 class Humidifier(SanUnit):
     '''
-    A fake unit increases the moisture content of HTL feedstocks to 80%.
-    Assume 80% of the water can be recovered from the end. Calcalute makeup water.
-        feedstock: X H2O + Y dry matter
-        target:    4Y H2O + Y dry matter
-        water recovery = 0.8 = (4Y - X - makeup water)/4Y
-        makeup water = 0.8Y - X
+    A fake unit increases the moisture content of HTL feedstocks to a certain moisture content.
     
     Parameters
     ----------
@@ -466,27 +471,24 @@ class Humidifier(SanUnit):
     def __init__(self, ID='', ins=None, outs=(), thermo=None, init_with='WasteStream', set_moisture = 0.8):
         
         SanUnit.__init__(self, ID, ins, outs, thermo, init_with)
-        
         self.set_moisture = set_moisture
 
-    _N_ins = 3
+    _N_ins = 2
     _N_outs = 1
         
     def _run(self):
         if self.set_moisture > 1:
             raise Exception("Moisture content cannot be >1 (above 100%)")
     
-        feedstock, makeup, recycle = self.ins
+        feedstock, makeup = self.ins
         mixture = self.outs[0]
         
-        makeup.imass['H2O'] = max(0, self.set_moisture*(feedstock.F_mass - feedstock.imass['H2O']) - feedstock.imass['H2O'])
-        
-        recycle.imass['H2O'] = (feedstock.F_mass - feedstock.imass['H2O'])/(1-self.set_moisture) - feedstock.F_mass - makeup.imass['H2O']
+        makeup.imass['H2O'] = (feedstock.F_mass - feedstock.imass['H2O'])/(1-self.set_moisture)*self.set_moisture - feedstock.imass['H2O']
 
         mixture.mix_from(self.ins)
         
     @property
-    def set_moisture_lvl(self):
+    def moisture_level(self):
         return self.set_moisture
 
 # =============================================================================
@@ -560,7 +562,6 @@ class StruvitePrecipitation(Reactor):
         self.wall_thickness_factor = wall_thickness_factor
         self.vessel_material = vessel_material
         self.vessel_type = vessel_type
-    
         
     def _run(self):
         
@@ -573,17 +574,18 @@ class StruvitePrecipitation(Reactor):
             effluent.copy_like(mixture)
         else:
             old_pH = self.HTLmixer.pH
-            neutral_OH_mol = 10**(-old_pH)*self.ins[0].F_mass # ignore solid volume
-            to_target_pH = 10**(self.target_pH - 14)*self.ins[0].F_mass # ignore solid volume
-            total_OH = neutral_OH_mol + to_target_pH # unit: mol/h
-            #base.imass['MgO'] = total_OH/2 * 40.3044/1000
-            self.HTL = self.ins[0]._source.ins[0]._source
-            if self.HTL.aqueous_pH >= 9:
-                base.imass['MgO'] = 0 # set to this value because we assume post-HTL pH is above 9 - use line above if not true (AJK)
-                #TODO remove  MgO if NaOH is added - assuming target pH is low enough
-                ##note - target pH is 9, all reactions are above this value, thus MgO is not needed
+            if old_pH > 9:
+                base.imass['MgO'] = 0
+            elif old_pH >= 7:
+                OH_M = 10**(old_pH-14)
+                OH_M_needed = 10**(self.target_pH - 14) - OH_M
+                base.imass['MgO'] = OH_M_needed/2*40.3044/1000*self.ins[0].F_vol*1000
             else:
-                base.imass['MgO'] = total_OH/2 * 40.3044/1000
+                neutral_OH_M = 10**(-old_pH)
+                to_target_OH_M = 10**(self.target_pH - 14)
+                OH_M_needed = neutral_OH_M + to_target_OH_M
+                base.imass['MgO'] = OH_M_needed/2*40.3044/1000*self.ins[0].F_vol*1000
+            
             supply_MgCl2.imass['MgCl2'] = max((mixture.imass['P']/30.973762*self.Mg_P_ratio -\
                                             base.imass['MgO']/40.3044)*95.211, 0)
     
@@ -669,25 +671,27 @@ class WWmixer(SanUnit):
 
 class WWTP(SanUnit):
     '''
-    WWTP is a fake unit that can set up sludge biochemical compositions
-    and calculate sludge elemental compositions.
+    WWTP is a fake unit that can set up solid biochemical compositions
+    and calculate solid elemental compositions.
     
     Parameters
     ----------
     ins : Iterable(stream)
         ww.
     outs : Iterable(stream)
-        sludge, treated.
+        solid, treated.
     ww_2_dry_sludge: float
         Wastewater-to-dry-sludge conversion factor, [metric ton/day/MGD].
-    sludge_moisture: float
-        Sludge moisture content.
-    sludge_dw_ash: float
-        Sludge dry weight ash content.
-    sludge_afdw_lipid: float
-        Sludge ash free dry weight lipid content.
-    sludge_afdw_protein: float
-        Sludge ash free dry weight protein content.
+    moisture: float
+        Solid moisture content.
+    dw_ash: float
+        Solid dry weight ash content.
+    afdw_lipid: float
+        Solid ash free dry weight lipid content.
+    afdw_protein: float
+        Solid ash free dry weight protein content.
+    afdw_lignin: float
+        Solid ash free dry weight lignin content.
     lipid_2_C: float
         Lipid to carbon factor.     
     protein_2_C: float
@@ -699,15 +703,22 @@ class WWTP(SanUnit):
     protein_2_N: float
         Protein to nitrogen factor.
     N_2_P: float
-        Nitrogen to phosphorus factor. 
+        Nitrogen to phosphorus factor.
+    feedstock: str
+        Can only be 'sludge' or 'biosolid'.
+    VSS_reduction: floar
+        VSS reduction ratio after anaerobic digestion.
+    before_AD_dw_ash: float
+        Solid dry weight ash content before AD.
     operation_hour: float
         Plant yearly operation hour, [hr/yr].
-        
+    high_IRR: 
+        If True, IRR = 0.1 and finance_interest_value = 0.08,
+        If False, IRR = 0.03 and finance_interest_value = 0.03.
+    
     References
     ----------
-    .. [1] Metcalf and Eddy, Incorporated. 1991. Wastewater Engineering:
-        Treatment Disposal and Reuse. New York: McGraw-Hill.
-    .. [2] Li, Y.; Leow, S.; Fedders, A. C.; Sharma, B. K.; Guest, J. S.;
+    .. [1] Li, Y.; Leow, S.; Fedders, A. C.; Sharma, B. K.; Guest, J. S.;
         Strathmann, T. J. Quantitative Multiphase Model for Hydrothermal
         Liquefaction of Algal Biomass. Green Chem. 2017, 19 (4), 1163–1174.
         https://doi.org/10.1039/C6GC03294J.
@@ -717,10 +728,12 @@ class WWTP(SanUnit):
 
     def __init__(self, ID='', ins=None, outs=(), thermo=None,
                  init_with='WasteStream', 
-                 ww_2_dry_sludge=0.94, # [1]
-                 sludge_moisture=0.99, sludge_dw_ash=0.257, 
-                 sludge_afdw_lipid=0.204, sludge_afdw_protein=0.463,
-                 sludge_afdw_lignin=0.00,
+                 ww_2_dry_sludge=1,
+                 moisture=0.99,
+                 dw_ash=0.257, 
+                 afdw_lipid=0.204,
+                 afdw_protein=0.463,
+                 afdw_lignin=0,
                  lipid_2_C=0.750,
                  protein_2_C=0.545,
                  carbo_2_C=0.400, 
@@ -730,15 +743,20 @@ class WWTP(SanUnit):
                  protein_2_N=0.159,
                  N_2_P=0.3927,
                  feedstock='sludge',
-                 operation_hours=yearly_operation_hour):
+                 # TODO: update these values with Metcalfe and Eddy values
+                 # value = loss of VSS, average from lit, see excel
+                 VSS_reduction=0.385664,
+                 before_AD_dw_ash=0.257,
+                 operation_hours=yearly_operation_hour,
+                 high_IRR=None):
         
         SanUnit.__init__(self, ID, ins, outs, thermo, init_with)
         self.ww_2_dry_sludge = ww_2_dry_sludge
-        self.sludge_moisture = sludge_moisture
-        self.sludge_dw_ash = sludge_dw_ash
-        self.sludge_afdw_lipid = sludge_afdw_lipid
-        self.sludge_afdw_lignin = sludge_afdw_lignin
-        self.sludge_afdw_protein = sludge_afdw_protein
+        self.moisture = moisture
+        self.dw_ash = dw_ash
+        self.afdw_lipid = afdw_lipid
+        self.afdw_lignin = afdw_lignin
+        self.afdw_protein = afdw_protein
         self.lipid_2_C = lipid_2_C
         self.protein_2_C = protein_2_C
         self.carbo_2_C = carbo_2_C
@@ -747,130 +765,132 @@ class WWTP(SanUnit):
         self.carbo_2_H = carbo_2_H
         self.protein_2_N = protein_2_N
         self.N_2_P = N_2_P
-        self.operation_hours = operation_hours
         self.feedstock = feedstock
+        self.VSS_reduction = VSS_reduction
+        self.before_AD_dw_ash = before_AD_dw_ash
+        self.operation_hours = operation_hours
+        self.high_IRR = high_IRR
     
     def _run(self):
         
         ww = self.ins[0]
-        sludge, treated, methane = self.outs
-#TODO ask Jianan if lignin should be included
-        self.sludge_afdw_carbo = round(1 - self.sludge_afdw_protein - self.sludge_afdw_lipid, 5)   
+        solid, treated, methane = self.outs
         
-        if self.sludge_dw_ash >= 1:
+        self.afdw_carbo = round(1 - self.afdw_protein - self.afdw_lipid - self.afdw_lignin, 5)   
+        
+        if self.dw_ash >= 1:
             raise Exception ('ash can not be larger than or equal to 1')
-#TODO ask Jianan if lignin should be included in sludge_C_ratio         
-        if self.sludge_afdw_protein + self.sludge_afdw_lipid > 1:
+        
+        if self.afdw_protein + self.afdw_lipid + self.afdw_lignin > 1:
             raise Exception ('protein and lipid exceed 1')
-            
-        self.sludge_dw = ww.F_vol*_m3perh_to_MGD*self.ww_2_dry_sludge*1000/24
-
-        sludge.imass['H2O'] = self.sludge_dw/(1-self.sludge_moisture)*self.sludge_moisture
-        sludge.imass['Sludge_ash'] = self.sludge_dw*self.sludge_dw_ash
-#TODO if feedstock == 'biosolid':
-        sludge_afdw = self.sludge_dw*(1 - self.sludge_dw_ash)
-
-
-#### anaerobic digestion        
+        
         if self.feedstock == 'biosolid':
-            Vss_reduction = 0.385664 #value = loss of VSS, average from lit, see excel           
-            methane.imass['CH4'] =  sludge_afdw * Vss_reduction * 0.178108571 * 0.7513 #L methane/kg Vss, methane density kg methane/L of methane
-            sludge_afdw = sludge_afdw * (1-Vss_reduction)
-            #TODO add heatloss to system
-            #TODO update these values with Metcalfe and Eddy values
+            self.dw = ww.F_vol*_m3perh_to_MGD*self.ww_2_dry_sludge*1000/24*(1-(1-self.before_AD_dw_ash)*self.VSS_reduction)
         else:
-            methane.imass['CH4'] = 0
-        #methane.imass['CH4'] =  sludge_afdw        
+            self.dw = ww.F_vol*_m3perh_to_MGD*self.ww_2_dry_sludge*1000/24
+
+        solid.imass['H2O'] = self.dw/(1-self.moisture)*self.moisture
+        solid.imass['Sludge_ash'] = self.dw*self.dw_ash
+        afdw = self.dw*(1 - self.dw_ash)
         
-        sludge.imass['Sludge_lipid'] = sludge_afdw*self.sludge_afdw_lipid
-        sludge.imass['Sludge_protein'] = sludge_afdw*self.sludge_afdw_protein
-        sludge.imass['Sludge_carbo'] = sludge_afdw*self.sludge_afdw_carbo
-        sludge.imass['Sludge_lignin'] = sludge_afdw*self.sludge_afdw_lignin
+        # anaerobic digestion        
+        if self.feedstock == 'biosolid':
+            # TODO: ask Andrew, double check the density of methane (0.657 kg/m3)
+            # TODO: update these values with Metcalfe and Eddy values
+            # 0.178108571 L methane/kg VSS, methane density 0.7513 kg methane/L of methane
+            methane.imass['CH4'] = afdw*self.VSS_reduction*0.178108571/1000*0.657
+            # methane.imass['CH4'] =  afdw * VSS_reduction * 0.178108571 * 0.7513
+        else:
+            methane.imass['CH4'] = 0   
         
-        treated.imass['H2O'] = ww.F_mass - sludge.F_mass
-
-
-    @property
-    def sludge_moisture_lvl(self):
-        return self.sludge_moisture
-
-    @property
-    def sludge_dw_protein(self):
-        return self.sludge_afdw_protein*(1-self.sludge_dw_ash)
+        solid.imass['Sludge_lipid'] = afdw*self.afdw_lipid
+        solid.imass['Sludge_protein'] = afdw*self.afdw_protein
+        solid.imass['Sludge_carbo'] = afdw*self.afdw_carbo
+        solid.imass['Sludge_lignin'] = afdw*self.afdw_lignin
+        
+        treated.imass['H2O'] = ww.F_mass - solid.F_mass
     
     @property
-    def sludge_dw_lipid(self):
-        return self.sludge_afdw_lipid*(1-self.sludge_dw_ash)
-
-    @property
-    def sludge_dw_lignin(self):
-        return self.sludge_afdw_lignin*(1-self.sludge_dw_ash)  
-
-    @property
-    def sludge_dw_carbo(self):
-        return self.sludge_afdw_carbo*(1-self.sludge_dw_ash)
-#TODO ask Jianan if lignin should be included in sludge_C_ratio   
-    @property
-    def sludge_C_ratio(self):
-       return self.sludge_dw_protein*self.protein_2_C + self.sludge_dw_lipid*self.lipid_2_C +\
-           self.sludge_dw_carbo*self.carbo_2_C
-  #TODO ask Jianan if lignin should be included in sludge_H_ratio           
-    @property
-    def sludge_H_ratio(self):
-       return self.sludge_dw_protein*self.protein_2_H + self.sludge_dw_lipid*self.lipid_2_H +\
-           self.sludge_dw_carbo*self.carbo_2_H
-   
-    @property
-    def sludge_N_ratio(self):
-       return self.sludge_dw_protein*self.protein_2_N
-   
-    @property
-    def sludge_P_ratio(self):
-       return self.sludge_N_ratio*self.N_2_P
+    def moisture_level(self):
+        return self.moisture
     
     @property
-    def sludge_O_ratio(self):
-       return 1 - self.sludge_C_ratio - self.sludge_H_ratio -\
-           self.sludge_N_ratio - self.sludge_dw_ash
-
-    @property
-    def sludge_C(self):
-       return self.sludge_C_ratio*self.sludge_dw
-           
-    @property
-    def sludge_H(self):
-       return self.sludge_H_ratio*self.sludge_dw
-   
-    @property
-    def sludge_N(self):
-       return self.sludge_N_ratio*self.sludge_dw
-   
-    @property
-    def sludge_P(self):
-       return self.sludge_P_ratio*self.sludge_dw
+    def dw_protein(self):
+        return self.afdw_protein*(1-self.dw_ash)
     
     @property
-    def sludge_O(self):
-       return self.sludge_O_ratio*self.sludge_dw
-           
+    def dw_lipid(self):
+        return self.afdw_lipid*(1-self.dw_ash) 
+    
+    @property
+    def dw_carbo(self):
+        return self.afdw_carbo*(1-self.dw_ash)
+    
+    @property
+    def dw_lignin(self):
+        return self.afdw_lignin*(1-self.dw_ash)
+    
+    # TODO: ask Jianan if lignin should be included in C_ratio
+    # TODO: yes, we need to determine the element composition of lignin
+    @property
+    def C_ratio(self):
+       return self.dw_protein*self.protein_2_C + self.dw_lipid*self.lipid_2_C +\
+           self.dw_carbo*self.carbo_2_C
+    
+    # TODO: ask Jianan if lignin should be included in H_ratio       
+    # TODO: yes, we need to determine the element composition of lignin    
+    @property
+    def H_ratio(self):
+       return self.dw_protein*self.protein_2_H + self.dw_lipid*self.lipid_2_H +\
+           self.dw_carbo*self.carbo_2_H
+    
+    @property
+    def N_ratio(self):
+       return self.dw_protein*self.protein_2_N
+    
+    @property
+    def P_ratio(self):
+       return self.N_ratio*self.N_2_P
+    
+    @property
+    def O_ratio(self):
+       return 1 - self.C_ratio - self.H_ratio -\
+           self.N_ratio - self.dw_ash
+    
+    @property
+    def C(self):
+       return self.C_ratio*self.dw
+    
+    @property
+    def H(self):
+       return self.H_ratio*self.dw
+    
+    @property
+    def N(self):
+       return self.N_ratio*self.dw
+    
+    @property
+    def P(self):
+       return self.P_ratio*self.dw
+    
+    @property
+    def O(self):
+       return self.O_ratio*self.dw
+    
     @property
     def AOSc(self):
-       return (3*self.sludge_N_ratio/14.0067 + 2*self.sludge_O_ratio/15.999 -\
-               self.sludge_H_ratio/1.00784)/(self.sludge_C_ratio/12.011)
-
+       return (3*self.N_ratio/14.0067 + 2*self.O_ratio/15.999 -\
+               self.H_ratio/1.00784)/(self.C_ratio/12.011)
+    
     @property
-    def sludge_HHV(self):
-       return 100*(0.338*self.sludge_C_ratio + 1.428*(self.sludge_H_ratio -\
-              self.sludge_O_ratio/8)) # [2]
-
+    def HHV(self):
+       return 100*(0.338*self.C_ratio + 1.428*(self.H_ratio -\
+              self.O_ratio/8)) # [1]
+    
     @property
     def H_C_eff(self):
-        return (self.sludge_H/1.00784-2*self.sludge_O/15.999)/self.sludge_C*12.011
-
-
-
-
-
+        return (self.H/1.00784-2*self.O/15.999)/self.C*12.011
+    
 # =============================================================================
 # WSConverter
 # =============================================================================

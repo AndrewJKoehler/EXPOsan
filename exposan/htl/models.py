@@ -9,6 +9,8 @@ This module is developed by:
     
     Yalin Li <mailto.yalin.li@gmail.com>
     
+    Andrew Koehler <koehler@mines.edu>
+    
 This module is under the University of Illinois/NCSA Open Source License.
 Please refer to https://github.com/QSD-Group/EXPOsan/blob/main/LICENSE.txt
 for license details.
@@ -16,26 +18,50 @@ for license details.
 
 import qsdsan as qs
 from chaospy import distributions as shape
-from qsdsan.utils import DictAttrSetter
-from exposan.htl import (
-    _m3perh_to_MGD,
-    _MJ_to_MMBTU,
-    _MMgal_to_L,
-    create_system,
-    )
+from qsdsan.utils import auom, DictAttrSetter
 
 __all__ = ('create_model',)
 
+# kg/m3
+biocrude_density = 980
+# kg/m3, this is for sludge with a moisture content higher than 80%,
+# google 'Design of wastewater treatment sludge thickeners Iowa State University'
+sludge_density = 1000
+# kg/L
+water_density = 1
+
+_m3perh_to_MGD = auom('m3/h').conversion_factor('MGD')
+_MMgal_to_L = auom('gal').conversion_factor('L')*1000000
+_oil_barrel_to_L = auom('oil_barrel').conversion_factor('L')
+_mile_to_km = auom('mile').conversion_factor('km')
+_lb_to_kg = auom('lb').conversion_factor('kg')
+_m3_to_ft3 = auom('m3').conversion_factor('ft3')
+_ton_to_kg = auom('ton').conversion_factor('kg')
+_MJ_to_MMBTU = auom('MJ').conversion_factor('MMBTU')
+
+# GDPCTPI (Gross Domestic Product: Chain-type Price Index), [2]
+GDPCTPI = {2007: 86.352,
+           2008: 87.977,
+           2009: 88.557,
+           2010: 89.619,
+           2011: 91.466,
+           2012: 93.176,
+           2013: 94.786,
+           2014: 96.436,
+           2015: 97.277,
+           2016: 98.208,
+           2017: 100.000,
+           2018: 102.290,
+           2019: 104.008,
+           2020: 105.407,
+           2021: 110.220,
+           2022: 117.995,
+           2023: 122.284}
+
 def create_model(system=None,
-                 feedstock='sludge',
-                 plant_size=False,
-                 ternary=False,
-                 high_IRR=False,
                  exclude_sludge_compositions=False,
                  include_HTL_yield_as_metrics=True,
-                 include_CFs_as_metrics=True,
-                 include_other_metrics=True,
-                 include_other_CFs_as_metrics=True,
+                 include_other_metrics=False,
                  include_check=True):
     '''
     Create a model based on the given system
@@ -47,66 +73,90 @@ def create_model(system=None,
         Can be either a :class:`System` objective for which the model will be created,
         or one of the allowed configurations ("baseline", "no_P", "PSA").
     '''
-    sys = create_system(system, high_IRR=high_IRR) if (not system) or isinstance(system, str) else system
+    
+    if system == None:
+        raise RuntimeError('must create a system first')
+    else:
+        sys = system
+    
     flowsheet = sys.flowsheet
+    cmps = qs.get_components()
     unit = flowsheet.unit
     stream = flowsheet.stream
     model = qs.Model(sys)
     param = model.parameter
-    if feedstock not in ['sludge','biosolid','food','fog','green','manure']:
-        raise ValueError("invalid feedstock, select from 'sludge', 'biosolid', 'food', 'fog', 'green', and 'manure'")
+    metric = model.metric
+    
+    WWTP = unit.WWTP
+    P1 = unit.P1
+    H1 = unit.H1
+    HTL = unit.HTL
+    H2SO4_Tank = unit.H2SO4_Tank
+    SP1 = unit.SP1
+    StruPre = unit.StruPre
+    CHG = unit.CHG
+    F1 = unit.F1
+    MemDis = unit.MemDis
+    P2 = unit.P2
+    HT = unit.HT
+    H2 = unit.H2
+    F2 = unit.F2
+    H3 = unit.H3
+    D1 = unit.D1
+    D2 = unit.D2
+    D3 = unit.D3
+    P3 = unit.P3
+    HC = unit.HC
+    H4 = unit.H4
+    F3 = unit.F3
+    D4 = unit.D4
+    H5 = unit.H5
+    H6 = unit.H6
+    GasolineTank = unit.GasolineTank
+    DieselTank = unit.DieselTank
+    HXN = unit.HXN
+    CHP = unit.CHP
+    CT = unit.CT
+    CWP = unit.CWP
+    HT_HC_units = (P2, HT, H2, F2, H3,
+                   D1, D2, D3, P3, HC,
+                   H4, F3, D4, H5, H6,
+                   GasolineTank,
+                   DieselTank)
+    
+    raw_wastewater = stream.raw_wastewater
+    NaOH_HTL = stream.NaOH_HTL
+    HCl = stream.HCl
+    H2SO4 = stream.H2SO4
+    MgCl2 = stream.MgCl2
+    NH4Cl = stream.NH4Cl
+    MgO = stream.MgO
+    struvite = stream.struvite
+    CHG_catalyst_in = stream.virgin_CHG_catalyst
+    NaOH_MemDis = stream.NaOH_MemDis
+    Membrane_in = stream.Membrane_in
+    ammonium_sulfate = stream.ammonium_sulfate
+    hydrogen_gas = stream.hydrogen_gas
+    CoMo_alumina_HT = stream.CoMo_alumina_HT
+    CoMo_alumina_HC = stream.CoMo_alumina_HC
+    gasoline = stream.gasoline
+    diesel = stream.diesel
+    natural_gas = stream.natural_gas
+    solid_ash = stream.solid_ash
+    cooling_tower_chemicals = stream.cooling_tower_chemicals
+    
+    feedstock = sys.flowsheet.WWTP.feedstock
+    high_IRR = sys.flowsheet.WWTP.high_IRR
+    
+    tea = sys.TEA
+    lca = sys.LCA
     
     # =========================================================================
     # WWTP
     # =========================================================================
     
-    # add plant size for Spearman's
-    
-    # raw_wastewater = stream.feedstock_assumed_in_wastewater
-    # dist = shape.Uniform(12618039,18927059)
-    # @param(name='plant_size',
-    #        element=raw_wastewater,
-    #        kind='coupled',
-    #        units='kg/hr',
-    #        baseline=15772549,
-    #        distribution=dist)
-    # def set_plant_size(i):
-    #     raw_wastewater.F_mass=i
-    
-    WWTP = unit.WWTP
-    if plant_size and feedstock == 'sludge':
-        dist = shape.Uniform(0.846,1.034) # only needed for sludge and when the independent variable is plant-size
-        @param(name='ww_2_dry_sludge',
-               element=WWTP,
-               kind='coupled',
-               units='ton/d/MGD',
-               baseline=0.94,
-               distribution=dist)
-        def set_ww_2_dry_sludge(i):
-            WWTP.ww_2_dry_sludge=i
-    
-    if ternary:
-        dist = shape.Triangle(0.052,0.5,0.8) # only needed for ternary
-        @param(name='sludge_moisture',
-               element=WWTP,
-               kind='coupled',
-               units='-',
-               baseline=0.5,
-               distribution=dist)
-        def set_WWTP_sludge_moisture(i):
-            WWTP.sludge_moisture=i
-        
-        dist = shape.Triangle(0.012,0.15,0.483) # only needed for ternary
-        @param(name='sludge_dw_ash',
-               element=WWTP,
-               kind='coupled',
-               units='-',
-               baseline=0.15,
-               distribution=dist)
-        def set_sludge_dw_ash(i):
-            WWTP.sludge_dw_ash=i
-    
     if not exclude_sludge_compositions:
+        # TODO: update values for sludge
         if feedstock == 'sludge':
             
             dist = shape.Uniform(0.6,0.8)
@@ -117,7 +167,7 @@ def create_model(system=None,
                    baseline=0.7,
                    distribution=dist)
             def set_WWTP_sludge_moisture(i):
-                WWTP.sludge_moisture=i
+                WWTP.moisture=i
             
             dist = shape.Triangle(0.174,0.257,0.414)
             @param(name='sludge_dw_ash',
@@ -127,7 +177,7 @@ def create_model(system=None,
                    baseline=0.257,
                    distribution=dist)
             def set_sludge_dw_ash(i):
-                WWTP.sludge_dw_ash=i
+                WWTP.dw_ash=i
             
             dist = shape.Triangle(0.08,0.204,0.308)
             @param(name='sludge_afdw_lipid',
@@ -137,7 +187,7 @@ def create_model(system=None,
                    baseline=0.204,
                    distribution=dist)
             def set_sludge_afdw_lipid(i):
-                WWTP.sludge_afdw_lipid=i
+                WWTP.afdw_lipid=i
             
             dist = shape.Triangle(0.38,0.463,0.51)
             @param(name='sludge_afdw_protein',
@@ -147,278 +197,70 @@ def create_model(system=None,
                    baseline=0.463,
                    distribution=dist)
             def set_sludge_afdw_protein(i):
-                WWTP.sludge_afdw_protein=i
+                WWTP.afdw_protein=i
                 
             dist = shape.Triangle(0.1944,0.3927,0.5556)
-            @param(name='N_2_P',
+            @param(name='sludge_N_2_P',
                    element=WWTP,
                    kind='coupled',
                    units='-',
                    baseline=0.3927,
                    distribution=dist)
-            def set_N_2_P(i):
+            def set_sludge_N_2_P(i):
                 WWTP.N_2_P=i
-   
-        if feedstock == 'biosolid': #TODO update values for biosolids
+        
+        # TODO: update values for biosolid
+        if feedstock == 'biosolid':
            
            dist = shape.Uniform(0.6,0.8)
-           @param(name='sludge_moisture',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.7,
-                   distribution=dist)
-           def set_WWTP_biosolids_moisture(i):
-               WWTP.sludge_moisture=i
+           @param(name='biosolid_moisture',
+                  element=WWTP,
+                  kind='coupled',
+                  units='-',
+                  baseline=0.7,
+                  distribution=dist)
+           def set_WWTP_biosolid_moisture(i):
+               WWTP.moisture=i
            
            dist = shape.Triangle(0.174,0.257,0.414)
            @param(name='sludge_dw_ash',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.257,
-                   distribution=dist)
-           def set_biosolids_dw_ash(i):
-               WWTP.sludge_dw_ash=i
+                  element=WWTP,
+                  kind='coupled',
+                  units='-',
+                  baseline=0.257,
+                  distribution=dist)
+           def set_biosolid_dw_ash(i):
+               WWTP.dw_ash=i
            
            dist = shape.Triangle(0.08,0.204,0.308)
            @param(name='sludge_afdw_lipid',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.204,
-                   distribution=dist)
-           def set_biosolids_afdw_lipid(i):
-               WWTP.sludge_afdw_lipid=i
+                  element=WWTP,
+                  kind='coupled',
+                  units='-',
+                  baseline=0.204,
+                  distribution=dist)
+           def set_biosolid_afdw_lipid(i):
+               WWTP.afdw_lipid=i
            
            dist = shape.Triangle(0.20,0.25,0.30)
            @param(name='sludge_afdw_protein',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.463,
-                   distribution=dist)
-           def set_biosolids_afdw_protein(i):
-               WWTP.sludge_afdw_protein=i
-        
+                  element=WWTP,
+                  kind='coupled',
+                  units='-',
+                  baseline=0.463,
+                  distribution=dist)
+           def set_biosolid_afdw_protein(i):
+               WWTP.afdw_protein=i
                
            dist = shape.Triangle(0.1944,0.3927,0.5556)
-           @param(name='N_2_P',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.3927,
-                   distribution=dist)
-           def set_N_2_P(i):
-               WWTP.N_2_P=i    
-           
-        if feedstock == 'food':
-            
-            dist = shape.Uniform(0.68,0.8)
-            @param(name='sludge_moisture',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.74,
-                   distribution=dist)
-            def set_WWTP_sludge_moisture(i):
-                WWTP.sludge_moisture=i
-            
-            dist = shape.Triangle(0.025,0.0679,0.126)
-            @param(name='sludge_dw_ash',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.0679,
-                   distribution=dist)
-            def set_sludge_dw_ash(i):
-                WWTP.sludge_dw_ash=i
-            
-            dist = shape.Uniform(0.13,0.30)
-            @param(name='sludge_afdw_lipid', # I will keep using 'sludge' in the name
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.22,
-                   distribution=dist)
-            def set_sludge_afdw_lipid(i):
-                WWTP.sludge_afdw_lipid=i
-            
-            dist = shape.Uniform(0.15,0.25)
-            @param(name='sludge_afdw_protein',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.2,
-                   distribution=dist)
-            def set_sludge_afdw_protein(i):
-                WWTP.sludge_afdw_protein=i
-
-            dist = shape.Triangle(0.1146,0.1502,0.2857)
-            @param(name='N_2_P',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.1502,
-                   distribution=dist)
-            def set_N_2_P(i):
-                WWTP.N_2_P=i
-
-        if feedstock == 'fog':
-            
-            dist = shape.Uniform(0.1,0.6)
-            @param(name='sludge_moisture',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.35,
-                   distribution=dist)
-            def set_WWTP_sludge_moisture(i):
-                WWTP.sludge_moisture=i
-            
-            dist = shape.Uniform(0.01492,0.02238)
-            @param(name='sludge_dw_ash',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.01865,
-                   distribution=dist)
-            def set_sludge_dw_ash(i):
-                WWTP.sludge_dw_ash=i
-            
-            dist = shape.Triangle(0.912,0.987,1)
-            @param(name='sludge_afdw_lipid', # I will keep using 'sludge' in the name
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.987,
-                   distribution=dist)
-            def set_sludge_afdw_lipid(i):
-                WWTP.sludge_afdw_lipid=i
-            
-            dist = shape.Triangle(0,0.002,0.0123)
-            @param(name='sludge_afdw_protein',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.002,
-                   distribution=dist)
-            def set_sludge_afdw_protein(i):
-                WWTP.sludge_afdw_protein=i
-
-            dist = shape.Triangle(0,0.01055,0.03472)
-            @param(name='N_2_P',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.01055,
-                   distribution=dist)
-            def set_N_2_P(i):
-                WWTP.N_2_P=i
-
-        if feedstock == 'green':
-            
-            dist = shape.Triangle(0.052,0.342,0.69)
-            @param(name='sludge_moisture',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.342,
-                   distribution=dist)
-            def set_WWTP_sludge_moisture(i):
-                WWTP.sludge_moisture=i
-            
-            dist = shape.Triangle(0.012,0.134,0.483)
-            @param(name='sludge_dw_ash',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.134,
-                   distribution=dist)
-            def set_sludge_dw_ash(i):
-                WWTP.sludge_dw_ash=i
-            
-            dist = shape.Uniform(0.0104,0.0259) # two points found in literature, but consider this as a range, since one point is for leaves and one is for branches
-            @param(name='sludge_afdw_lipid', # I will keep using 'sludge' in the name
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.018,
-                   distribution=dist)
-            def set_sludge_afdw_lipid(i):
-                WWTP.sludge_afdw_lipid=i
-            
-            dist = shape.Uniform(0.016,0.082)
-            @param(name='sludge_afdw_protein',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.049,
-                   distribution=dist)
-            def set_sludge_afdw_protein(i):
-                WWTP.sludge_afdw_protein=i
-
-            dist = shape.Uniform(0.1871,0.2287)
-            @param(name='N_2_P',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.2079,
-                   distribution=dist)
-            def set_N_2_P(i):
-                WWTP.N_2_P=i
-
-        if feedstock == 'manure':
-            
-            dist = shape.Triangle(0.1735,0.6634,0.7975)
-            @param(name='sludge_moisture',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.6634,
-                   distribution=dist)
-            def set_WWTP_sludge_moisture(i):
-                WWTP.sludge_moisture=i
-            
-            dist = shape.Triangle(0.138,0.3056,0.4295)
-            @param(name='sludge_dw_ash',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.3056,
-                   distribution=dist)
-            def set_sludge_dw_ash(i):
-                WWTP.sludge_dw_ash=i
-            
-            dist = shape.Triangle(0.0377,0.092325,0.247)
-            @param(name='sludge_afdw_lipid', # I will keep using 'sludge' in the name
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.092325,
-                   distribution=dist)
-            def set_sludge_afdw_lipid(i):
-                WWTP.sludge_afdw_lipid=i
-            
-            dist = shape.Triangle(0.143,0.216375,0.264)
-            @param(name='sludge_afdw_protein',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.216375,
-                   distribution=dist)
-            def set_sludge_afdw_protein(i):
-                WWTP.sludge_afdw_protein=i
-
-            dist = shape.Uniform(0.2534,0.3801)
-            @param(name='N_2_P',
-                   element=WWTP,
-                   kind='coupled',
-                   units='-',
-                   baseline=0.3167,
-                   distribution=dist)
-            def set_N_2_P(i):
-                WWTP.N_2_P=i
+           @param(name='biosolid_N_2_P',
+                  element=WWTP,
+                  kind='coupled',
+                  units='-',
+                  baseline=0.3927,
+                  distribution=dist)
+           def set_biosolid_N_2_P(i):
+               WWTP.N_2_P=i
 
     dist = shape.Uniform(0.675,0.825)
     @param(name='lipid_2_C',
@@ -503,7 +345,6 @@ def create_model(system=None,
     # =========================================================================
     # HTL
     # =========================================================================
-    H1 = unit.H1
     dist = shape.Uniform(0.0170348,0.0227131)
     @param(name='enforced heating transfer coefficient',
            element=H1,
@@ -514,7 +355,8 @@ def create_model(system=None,
     def set_U(i):
         H1.U=i
     
-    HTL = unit.HTL
+    # TODO: if we add heat loss, consider add that as an uncertainty parameter here
+    
     dist = shape.Triangle(0.692,0.846,1)
     @param(name='lipid_2_biocrude',
            element=HTL,
@@ -692,7 +534,6 @@ def create_model(system=None,
     # =========================================================================
     # StruPre
     # =========================================================================
-    StruPre = unit.StruPre
     dist = shape.Uniform(8.5,9.5)
     @param(name='target_pH',
            element=StruPre,
@@ -716,7 +557,6 @@ def create_model(system=None,
     # =========================================================================
     # CHG
     # =========================================================================
-    CHG = unit.CHG
     dist = shape.Triangle(2.86,3.562,3.99)
     @param(name='WHSV',
            element=CHG,
@@ -750,7 +590,6 @@ def create_model(system=None,
     # =========================================================================
     # MemDis
     # =========================================================================
-    MemDis = unit.MemDis
     dist = shape.Uniform(7.91,8.41)
     @param(name='influent_pH',
            element=MemDis,
@@ -844,7 +683,6 @@ def create_model(system=None,
     # =========================================================================
     # HT
     # =========================================================================
-    HT = unit.HT
     dist = shape.Uniform(0.5625,0.6875)
     @param(name='WHSV',
            element=HT,
@@ -909,7 +747,6 @@ def create_model(system=None,
     # =========================================================================
     # HC
     # =========================================================================
-    HC = unit.HC
     dist = shape.Uniform(0.5625,0.6875)
     @param(name='WHSV',
            element=HC,
@@ -993,7 +830,6 @@ def create_model(system=None,
     def set_HT_TIC_factor(i):
         HT.TIC_factor=i
     
-    CHP = unit.CHP
     dist = shape.Uniform(980,1470)
     @param(name='unit_TIC',
            element='TEA',
@@ -1003,8 +839,6 @@ def create_model(system=None,
            distribution=dist)
     def set_unit_TIC(i):
         CHP.unit_TIC=i
-    
-    tea = sys.TEA
     
     if high_IRR:
         dist = shape.Triangle(0.05,0.1,0.15)
@@ -1028,51 +862,54 @@ def create_model(system=None,
         def set_IRR(i):
             tea.IRR=i
     
-    makeup_water = stream.makeup_water
-    dist = shape.Uniform(0.000475,0.000581)
-    @param(name='makeup water price',
-           element='TEA',
-           kind='isolated',
-           units='$/kg',
-           baseline=0.000528,
-           distribution=dist)
-    def set_makeup_water_price(i):
-        makeup_water.price=i
-    
-    H2SO4 = stream.H2SO4
-    dist = shape.Triangle(0.005994,0.00658,0.014497)
+    H2SO4_price = (0.043*1+0.0002*(93/5-1))/(93/5)/_lb_to_kg/GDPCTPI[2016]*GDPCTPI[2022]
+    dist = shape.Uniform(H2SO4_price*0.9,H2SO4_price*1.1)
     @param(name='5% H2SO4 price',
            element='TEA',
            kind='isolated',
            units='$/kg',
-           baseline=0.00658,
+           baseline=H2SO4_price,
            distribution=dist)
     def set_H2SO4_price(i):
         H2SO4.price=i
+        
+    NaOH_price = 0.2384/_lb_to_kg/GDPCTPI[2016]*GDPCTPI[2022]
+    dist = shape.Uniform(NaOH_price*0.9,NaOH_price*1.1)
+    @param(name='NaOH price',
+           element='TEA',
+           kind='isolated',
+           units='$/kg',
+           baseline=NaOH_price,
+           distribution=dist)
+    def set_NaOH_HTL_price(i):
+        NaOH_HTL.price=NaOH_MemDis.price=i
     
-    MgCl2 = stream.MgCl2
-    dist = shape.Triangle(0.525,0.5452,0.57)
+    magnesium_chloride_price_min = 525/_ton_to_kg
+    magnesium_chloride_price_max = 580/_ton_to_kg
+    magnesium_chloride_price_ave = 535/_ton_to_kg
+    dist = shape.Uniform(magnesium_chloride_price_min,magnesium_chloride_price_max)
     @param(name='MgCl2 price',
            element='TEA',
            kind='isolated',
            units='$/kg',
-           baseline=0.5452,
+           baseline=magnesium_chloride_price_ave,
            distribution=dist)
     def set_MgCl2_price(i):
         MgCl2.price=i
     
-    NH4Cl = stream.NH4Cl
-    dist = shape.Uniform(0.12,0.14)
+    ammonium_chloride_price_min = 0.37
+    ammonium_chloride_price_max = 0.53
+    ammonium_chloride_price_ave = 0.4475
+    dist = shape.Triangle(ammonium_chloride_price_min,ammonium_chloride_price_ave,ammonium_chloride_price_max)
     @param(name='NH4Cl price',
            element='TEA',
            kind='isolated',
            units='$/kg',
-           baseline=0.13,
+           baseline=ammonium_chloride_price_ave,
            distribution=dist)
     def set_NH4Cl_price(i):
         NH4Cl.price=i
     
-    MgO = stream.MgO
     dist = shape.Uniform(0.1,0.3)
     @param(name='MgO price',
            element='TEA',
@@ -1083,132 +920,147 @@ def create_model(system=None,
     def set_MgO_price(i):
         MgO.price=i
     
-    struvite = stream.struvite
-    dist = shape.Triangle(0.419,0.661,1.213)
+    struvite_price_min = 0.19/_lb_to_kg/GDPCTPI[2016]*GDPCTPI[2022]
+    struvite_price_max = 0.55/_lb_to_kg/GDPCTPI[2016]*GDPCTPI[2022]
+    struvite_price_ave = 0.30/_lb_to_kg/GDPCTPI[2016]*GDPCTPI[2022]
+    dist = shape.Triangle(struvite_price_min,struvite_price_ave,struvite_price_max)
     @param(name='struvite price',
            element='TEA',
            kind='isolated',
            units='$/kg',
-           baseline=0.661,
+           baseline=struvite_price_ave,
            distribution=dist)
     def set_struvite_price(i):
         struvite.price=i        
-            
-    H2 = stream.H2
-    dist = shape.Uniform(1.450,1.772)
-    @param(name='H2 price',
+    
+    hydrogen_gas_price = 0.7306/_lb_to_kg/GDPCTPI[2016]*GDPCTPI[2022]
+    dist = shape.Uniform(hydrogen_gas_price*0.9,hydrogen_gas_price*1.1)
+    @param(name='hydrogen gas price',
            element='TEA',
            kind='isolated',
            units='$/kg',
-           baseline=1.611,
+           baseline=hydrogen_gas_price,
            distribution=dist)
-    def set_H2_price(i):
-        H2.price=i
+    def set_hydrogen_gas_price(i):
+        hydrogen_gas.price=i
     
-    NaOH = stream.NaOH
-    dist = shape.Uniform(0.473,0.578)
-    @param(name='NaOH price',
-           element='TEA',
-           kind='isolated',
-           units='$/kg',
-           baseline=0.5256,
-           distribution=dist)
-    def set_NaOH_price(i):
-        NaOH.price=i
-    
-    ammonium_sulfate = stream.ammonium_sulfate
-    dist = shape.Triangle(0.1636,0.3236,0.463)
+    ammonium_sulfate_price_min = 0.22
+    ammonium_sulfate_price_max = 0.32
+    ammonium_sulfate_price_ave = 0.2825
+    dist = shape.Triangle(ammonium_sulfate_price_min,ammonium_sulfate_price_ave,ammonium_sulfate_price_max)
     @param(name='ammonium sulfate price',
            element='TEA',
            kind='isolated',
            units='$/kg',
-           baseline=0.3236,
+           baseline=ammonium_sulfate_price_ave,
            distribution=dist)
     def set_ammonium_sulfate_price(i):
         ammonium_sulfate.price=i
     
-    dist = shape.Uniform(83.96,102.62)
+    membrane_price = 90/GDPCTPI[2008]*GDPCTPI[2022]
+    dist = shape.Uniform(membrane_price*0.9,membrane_price*1.1)
     @param(name='membrane price',
            element='TEA',
            kind='isolated',
            units='$/kg',
-           baseline=93.29,
+           baseline=membrane_price,
            distribution=dist)
     def set_membrane_price(i):
         MemDis.membrane_price=i
+        Membrane_in.price=i
     
-    CHG_catalyst_in = CHG.ins[1]
-    dist = shape.Triangle(67.27,134.53,269.07)
+    CHG_catalyst_price = 60/_lb_to_kg/GDPCTPI[2011]*GDPCTPI[2022]
+    dist = shape.Triangle(CHG_catalyst_price*0.5,CHG_catalyst_price,CHG_catalyst_price*2)
     @param(name='CHG catalyst price',
            element='TEA',
            kind='isolated',
            units='$/kg',
-           baseline=134.53,
+           baseline=CHG_catalyst_price,
            distribution=dist)
     def set_catalyst_price(i):
         CHG_catalyst_in.price=i
     
-    natural_gas = stream.natural_gas
-    dist = shape.Triangle(0.121,0.1685,0.3608)
-    @param(name='CH4 price',
+    natural_gas_price_min = 6.18/1000*_m3_to_ft3/0.657
+    natural_gas_price_max = 9.58/1000*_m3_to_ft3/0.657
+    natural_gas_price_ave = 7.66/1000*_m3_to_ft3/0.657
+    dist = shape.Triangle(natural_gas_price_min,natural_gas_price_ave,natural_gas_price_max)
+    @param(name='natural gas price',
            element='TEA',
            kind='isolated',
            units='$/kg',
-           baseline=0.1685,
+           baseline=natural_gas_price_ave,
            distribution=dist)
     def set_CH4_price(i):
         natural_gas.price=i
     
-    CoMo_alumina_HT, CoMo_alumina_HC = stream.CoMo_alumina_HT, stream.CoMo_alumina_HC
-    dist = shape.Uniform(34.91,42.67)
+    HT_HC_catalyst_price = 15.5/_lb_to_kg/GDPCTPI[2007]*GDPCTPI[2022]
+    dist = shape.Uniform(0.9*HT_HC_catalyst_price,1.1*HT_HC_catalyst_price)
     @param(name='HT & HC catalyst price',
            element='TEA',
            kind='isolated',
            units='$/kg',
-           baseline=38.79,
+           baseline=HT_HC_catalyst_price,
            distribution=dist)
     def set_HT_HC_catalyst_price(i):
         CoMo_alumina_HT.price=CoMo_alumina_HC.price=i
-        
-    gasoline = stream.gasoline
-    dist = shape.Triangle(0.7085,0.9388,1.4493)
+    
+    gasoline_price_min = 0.97
+    gasoline_price_max = 1.43
+    gasoline_price_ave = 1.177
+    dist = shape.Triangle(gasoline_price_min,gasoline_price_ave,gasoline_price_max)
     @param(name='gasoline price',
            element='TEA',
            kind='isolated',
            units='$/kg',
-           baseline=0.9388,
+           baseline=gasoline_price_ave,
            distribution=dist)
     def set_gasoline_price(i):
         gasoline.price=i
     
-    diesel = stream.diesel
-    dist = shape.Triangle(0.7458,0.9722,1.6579)
+    diesel_price_min = 0.99
+    diesel_price_max = 1.53
+    diesel_price_ave = 1.331
+    dist = shape.Triangle(diesel_price_min,diesel_price_ave,diesel_price_max)
     @param(name='diesel price',
            element='TEA',
            kind='isolated',
            units='$/kg',
-           baseline=0.9722,
+           baseline=diesel_price_ave,
            distribution=dist)
     def set_diesel_price(i):
         diesel.price=i
-        
-    # dist = shape.Uniform(-0.0605,-0.0495)
-    # @param(name='residual disposal',
-    #        element='TEA',
-    #        kind='isolated',
-    #        units='$/kg',
-    #        baseline=-0.055,
-    #        distribution=dist)
-    # def set_residual_disposal(i):
-    #     AcidEx.outs[0].price=i
-    # not include residual for TEA and LCA for now
     
-    dist = shape.Triangle(0.0667,0.06879,0.07180)
+    ash_disposal_price = -1.41*10**6/7880/4270/GDPCTPI[2016]*GDPCTPI[2022]
+    dist = shape.Uniform(ash_disposal_price*1.1,ash_disposal_price*0.9)
+    @param(name='ash disposal price',
+           element='TEA',
+           kind='isolated',
+           units='$/kg',
+           baseline=ash_disposal_price,
+           distribution=dist)
+    def set_ash_disposal_price(i):
+        solid_ash.price=i
+    
+    cooling_chemicals_price = 1.7842/_lb_to_kg/GDPCTPI[2016]*GDPCTPI[2022]
+    dist = shape.Uniform(cooling_chemicals_price*0.9,cooling_chemicals_price*1.1)
+    @param(name='cooling tower chemicals price',
+           element='TEA',
+           kind='isolated',
+           units='$/kg',
+           baseline=cooling_chemicals_price,
+           distribution=dist)
+    def set_cooling_tower_chemicals_price(i):
+        cooling_tower_chemicals.price=i
+    
+    electricity_price_min = qs.PowerUtility.price*0.9
+    electricity_price_max = qs.PowerUtility.price*1.1
+    electricity_price_ave = qs.PowerUtility.price
+    dist = shape.Uniform(electricity_price_min,electricity_price_max)
     @param(name='electricity price',
            element='TEA',
            kind='isolated',
            units='$/kg',
-           baseline=0.06879,
+           baseline=electricity_price_ave,
            distribution=dist)
     def set_electricity_price(i):
         qs.PowerUtility.price=i
@@ -1216,11 +1068,12 @@ def create_model(system=None,
     # =========================================================================
     # LCA (unifrom ± 10%)
     # =========================================================================
+    CF = 'GlobalWarming'
     # don't get joint distribution for multiple times, since the baselines for LCA will change.
-    if include_CFs_as_metrics:
-        qs.ImpactItem.get_all_items().pop('feedstock_item')
-        for item in qs.ImpactItem.get_all_items().keys():
-            for CF in qs.ImpactIndicator.get_all_indicators().keys():
+    qs.ImpactItem.get_all_items().pop('raw_wastewater')
+    for item in qs.ImpactItem.get_all_items().keys():
+        if qs.ImpactItem.get_item(item).CFs:
+            if qs.ImpactItem.get_item(item).CFs[CF] != 0:
                 abs_small = 0.9*qs.ImpactItem.get_item(item).CFs[CF]
                 abs_large = 1.1*qs.ImpactItem.get_item(item).CFs[CF]
                 dist = shape.Uniform(min(abs_small,abs_large),max(abs_small,abs_large))
@@ -1237,37 +1090,33 @@ def create_model(system=None,
     # =========================================================================
     # metrics
     # =========================================================================
-
-    metric = model.metric
+    if include_other_metrics:
     
-    raw_wastewater = stream.feedstock_assumed_in_wastewater
-    
-    if include_other_metrics: # all metrics
         # element metrics
         
         @metric(name='C_afdw',units='%',element='Sankey')
         def get_C_afdw():
-            return WWTP.sludge_C*24/1000/(raw_wastewater.F_mass/157262.48454459725)/(1-WWTP.sludge_dw_ash)
+            return WWTP.C*24/1000/(raw_wastewater.F_mass/157262.48454459725)/(1-WWTP.dw_ash)
         
         @metric(name='N_afdw',units='%',element='Sankey')
         def get_N_afdw():
-            return WWTP.sludge_N*24/1000/(raw_wastewater.F_mass/157262.48454459725)/(1-WWTP.sludge_dw_ash)
+            return WWTP.N*24/1000/(raw_wastewater.F_mass/157262.48454459725)/(1-WWTP.dw_ash)
         
         @metric(name='P_afdw',units='%',element='Sankey')
         def get_P_afdw():
-            return WWTP.sludge_P*24/1000/(raw_wastewater.F_mass/157262.48454459725)/(1-WWTP.sludge_dw_ash)
+            return WWTP.P*24/1000/(raw_wastewater.F_mass/157262.48454459725)/(1-WWTP.dw_ash)
         
         @metric(name='sludge_C',units='kg/hr',element='Sankey')
         def get_sludge_C():
-            return WWTP.sludge_C
+            return WWTP.C
         
         @metric(name='sludge_N',units='kg/hr',element='Sankey')
         def get_sludge_N():
-            return WWTP.sludge_N
+            return WWTP.N
         
         @metric(name='sludge_P',units='kg/hr',element='Sankey')
         def get_sludge_P():
-            return WWTP.sludge_P
+            return WWTP.P
         
         @metric(name='HTLaqueous_C',units='kg/hr',element='Sankey')
         def get_HTLaqueous_C():
@@ -1301,8 +1150,6 @@ def create_model(system=None,
         def get_hydrochar_P():
             return HTL.hydrochar_P
         
-        cmps = qs.get_components()
-        D2 = unit.D2
         @metric(name='HT_gasoline_C',units='kg/hr',element='Sankey')
         def get_HT_gasoline_C():
             return sum(D2.outs[0].mass*[cmp.i_C for cmp in cmps])
@@ -1311,7 +1158,6 @@ def create_model(system=None,
         def get_HT_gasoline_N():
             return sum(D2.outs[0].mass*[cmp.i_N for cmp in cmps])
         
-        D3 = unit.D3
         @metric(name='HT_diesel_C',units='kg/hr',element='Sankey')
         def get_HT_diesel_C():
             return sum(D3.outs[0].mass*[cmp.i_C for cmp in cmps])
@@ -1319,8 +1165,7 @@ def create_model(system=None,
         @metric(name='HT_heavy_oil_C',units='kg/hr',element='Sankey')
         def get_HT_heavy_oil_C():
             return sum(D3.outs[1].mass*[cmp.i_C for cmp in cmps])
-    
-        F2, D1 = unit.F2, unit.D1
+        
         @metric(name='HT_gas_C',units='kg/hr',element='Sankey')
         def get_HT_gas_C():
             mass = F2.outs[0].mass + D1.outs[0].mass
@@ -1341,7 +1186,6 @@ def create_model(system=None,
             mass = sum((i.outs[0].mass for i in (D1, D2, D3, F2)), D3.outs[1].mass)
             return HTL.biocrude_N - sum(mass*[cmp.i_N for cmp in cmps])
         
-        D4 = unit.D4
         @metric(name='HC_gasoline_C',units='kg/hr',element='Sankey')
         def get_HC_gasoline_C():
             return sum(D4.outs[0].mass*[cmp.i_C for cmp in cmps])
@@ -1350,7 +1194,6 @@ def create_model(system=None,
         def get_HC_diesel_C():
             return sum(D4.outs[1].mass*[cmp.i_C for cmp in cmps])
         
-        F3 = unit.F3
         @metric(name='HC_gas_C',units='kg/hr',element='Sankey')
         def get_HC_gas_C():
             return sum(F3.outs[0].mass*[cmp.i_C for cmp in cmps])
@@ -1400,7 +1243,6 @@ def create_model(system=None,
         def get_CHG_out_P():
             return CHG.CHGout_P
         
-        F1 = unit.F1
         @metric(name='CHG_gas_C',units='kg/hr',element='Sankey')
         def get_CHG_gas_C():
             return sum(F1.outs[0].mass*[cmp.i_C for cmp in cmps])
@@ -1425,11 +1267,11 @@ def create_model(system=None,
         
         @metric(name='sludge_HHV',units='MJ/kg',element='Sankey')
         def get_sludge_HHV():
-            return WWTP.sludge_HHV
+            return WWTP.HHV
         
         @metric(name='sludge_E',units='GJ/hr',element='Sankey')
         def get_sludge_E():
-            return (WWTP.outs[0].F_mass-WWTP.outs[0].imass['H2O'])*WWTP.sludge_HHV/1000
+            return (WWTP.outs[0].F_mass-WWTP.outs[0].imass['H2O'])*WWTP.HHV/1000
         
         @metric(name='biocrude_E',units='GJ/hr',element='Sankey')
         def get_biocrude_E():
@@ -1467,12 +1309,12 @@ def create_model(system=None,
         def get_HC_gas_E():
             return F3.outs[0].HHV/1000000
         
-        @metric(name='HT_H2_E',units='GJ/hr',element='Sankey')
-        def get_HT_H2_E():
+        @metric(name='HT_hydrogen_gas_E',units='GJ/hr',element='Sankey')
+        def get_HT_hydrogen_gas_E():
             return HT.ins[1].HHV/1000000
         
-        @metric(name='HC_H2_E',units='GJ/hr',element='Sankey')
-        def get_HC_H2_E():
+        @metric(name='HC_hydrogen_gas_E',units='GJ/hr',element='Sankey')
+        def get_HC_hydrogen_gas_E():
             return HC.ins[1].HHV/1000000
         
         @metric(name='CHG_gas_E',units='GJ/hr',element='Sankey')
@@ -1484,8 +1326,6 @@ def create_model(system=None,
         def get_TIC():
             return sys.installed_equipment_cost
         
-        P1 = unit.P1
-        
         try:
             SluC = unit.SluC
             @metric(name='HTL_TIC',units='$',element='TEA')
@@ -1496,7 +1336,6 @@ def create_model(system=None,
             def get_HTL_TIC():
                 return sum(i.installed_cost for i in (P1, H1, HTL))
         
-        SP1, H2SO4_Tank = unit.SP1, unit.H2SO4_Tank
         if AcidEx:
             if SP1.F_mass_out != 0:
                 def get_Phosphorus_TIC():
@@ -1514,7 +1353,7 @@ def create_model(system=None,
             else:
                 def get_Phosphorus_TIC():
                     return 0
-        model.metric(getter=get_Phosphorus_TIC, name='Phosphorus_TIC',units='$',element='TEA')
+        metric(getter=get_Phosphorus_TIC, name='Phosphorus_TIC',units='$',element='TEA')
         
         @metric(name='CHG_TIC',units='$',element='TEA')
         def get_CHG_TIC():
@@ -1526,16 +1365,12 @@ def create_model(system=None,
         else:
             def get_Nitrogen_TIC():
                 return 0
-        model.metric(getter=get_Nitrogen_TIC, name='Nitrogen_TIC',units='$',element='TEA')
+        metric(getter=get_Nitrogen_TIC, name='Nitrogen_TIC',units='$',element='TEA')
         
-        
-        HT_HC_units = (unit.P2, HT, unit.H2, F2, unit.H3, D1, D2, D3, unit.P3, HC,
-                       unit.H4, F3, D4, unit.H5, unit.H6, unit.GasolineTank, unit.DieselTank)
         @metric(name='HT_HC_TIC',units='$',element='TEA')
         def get_HT_HC_TIC():
             return sum(i.installed_cost for i in HT_HC_units)
         
-        HXN = unit.HXN
         @metric(name='HXN_TIC',units='$',element='TEA')
         def get_HXN_TIC():
             return HXN.installed_cost
@@ -1543,6 +1378,14 @@ def create_model(system=None,
         @metric(name='CHP_TIC',units='$',element='TEA')
         def get_CHP_TIC():
             return CHP.installed_cost
+        
+        @metric(name='CT_TIC',units='$',element='TEA')
+        def get_CT_TIC():
+            return CT.installed_cost
+        
+        @metric(name='CWP_TIC',units='$',element='TEA')
+        def get_CWP_TIC():
+            return CWP.installed_cost
         
         @metric(name='AOC',units='$/yr',element='TEA')
         def get_AOC():
@@ -1560,13 +1403,21 @@ def create_model(system=None,
         def get_material_VOC():
             return sys.material_cost
         
+        @metric(name='NaOH_HTL_VOC',units='$/yr',element='TEA')
+        def get_NaOH_HTL_VOC():
+            return NaOH_HTL.cost*sys.operating_hours
+        
+        @metric(name='HCl_VOC',units='$/yr',element='TEA')
+        def get_HCl_VOC():
+            return HCl.cost*sys.operating_hours
+        
         @metric(name='H2SO4_VOC',units='$/yr',element='TEA')
         def get_H2SO4_VOC():
             return H2SO4.cost*sys.operating_hours
         
-        @metric(name='H2_VOC',units='$/yr',element='TEA')
-        def get_H2_VOC():
-            return H2.cost*sys.operating_hours
+        @metric(name='hydrogen_gas_VOC',units='$/yr',element='TEA')
+        def get_hydrogen_gas_VOC():
+            return hydrogen_gas.cost*sys.operating_hours
         
         @metric(name='CHG_catalyst_VOC',units='$/yr',element='TEA')
         def get_CHG_catalyst_VOC():
@@ -1588,14 +1439,21 @@ def create_model(system=None,
         def get_MgO_VOC():
             return MgO.cost*sys.operating_hours
         
-        @metric(name='NaOH_VOC',units='$/yr',element='TEA')
-        def get_NaOH_VOC():
-            return NaOH.cost*sys.operating_hours
+        @metric(name='NaOH_MemDis_VOC',units='$/yr',element='TEA')
+        def get_NaOH_MemDis_VOC():
+            return NaOH_MemDis.cost*sys.operating_hours
         
-        Membrane_in = stream.Membrane_in
         @metric(name='membrane_VOC',units='$/yr',element='TEA')
         def get_membrane_VOC():
             return Membrane_in.cost*sys.operating_hours
+        
+        @metric(name='natural_gas_VOC',units='$/yr',element='TEA')
+        def get_natural_gas_VOC():
+            return natural_gas.cost*sys.operating_hours
+        
+        @metric(name='cooling_tower_chemicals_VOC',units='$/yr',element='TEA')
+        def get_cooling_tower_chemicals_VOC():
+            return cooling_tower_chemicals.cost*sys.operating_hours
         
         @metric(name='utility_VOC',units='$/yr',element='TEA')
         def get_utility_VOC():
@@ -1627,13 +1485,16 @@ def create_model(system=None,
         def get_CHP_utility_VOC():
             return CHP.utility_cost*sys.operating_hours
         
-        # LCA metrics
-        lca = sys.LCA
-        @metric(name='construction_GWP',units='kg CO2 eq',element='LCA')
-        def get_construction_GWP():
-            return lca.get_construction_impacts()['GlobalWarming']
+        @metric(name='CT_utility_VOC',units='$/yr',element='TEA')
+        def get_CT_utility_VOC():
+            return CT.utility_cost*sys.operating_hours
         
-        diesel = stream.diesel
+        @metric(name='CWP_utility_VOC',units='$/yr',element='TEA')
+        def get_CWP_utility_VOC():
+            return CWP.utility_cost*sys.operating_hours
+        
+        # LCA metrics
+        
         @metric(name='stream_GWP',units='kg CO2 eq',element='LCA')
         def get_stream_GWP():
             return lca.get_stream_impacts()['GlobalWarming']
@@ -1642,55 +1503,10 @@ def create_model(system=None,
         def get_other_GWP():
             return lca.get_other_impacts()['GlobalWarming']
         
-        try:
-            SluC = unit.SluC
-            @metric(name='HTL_constrution_GWP',units='kg CO2 eq',element='LCA')
-            def get_HTL_constrution_GWP():
-                table_construction = lca.get_impact_table('Construction')['GlobalWarming [kg CO2-eq]']
-                return table_construction['Stainless_steel [kg]']['A000']+table_construction['Stainless_steel [kg]']['A100']+\
-                       table_construction['Stainless_steel [kg]']['A110']+table_construction['Stainless_steel [kg]']['A120']
-        except AttributeError:
-            @metric(name='HTL_constrution_GWP',units='kg CO2 eq',element='LCA')
-            def get_HTL_constrution_GWP():
-                table_construction = lca.get_impact_table('Construction')['GlobalWarming [kg CO2-eq]']
-                return +table_construction['Stainless_steel [kg]']['A100']+\
-                       table_construction['Stainless_steel [kg]']['A110']+table_construction['Stainless_steel [kg]']['A120']       
-        
-        if AcidEx:
-            def get_nutrient_constrution_GWP():
-                table_construction = lca.get_impact_table('Construction')['GlobalWarming [kg CO2-eq]']
-                return table_construction['Carbon_steel [kg]']['A220']+table_construction['RO [m2]']['A260']+\
-                       table_construction['Stainless_steel [kg]']['A200']+table_construction['Stainless_steel [kg]']['T200']
-        else:
-            def get_nutrient_constrution_GWP():
-                table_construction = lca.get_impact_table('Construction')['GlobalWarming [kg CO2-eq]']
-                return table_construction['Carbon_steel [kg]']['A220']+table_construction['RO [m2]']['A260']+\
-                       table_construction['Stainless_steel [kg]']['T200']
-        model.metric(getter=get_nutrient_constrution_GWP, name='nutrient_constrution_GWP',units='kg CO2 eq',element='LCA')
-
-        @metric(name='CHG_constrution_GWP',units='kg CO2 eq',element='LCA')
-        def get_CHG_constrution_GWP():
-            table_construction = lca.get_impact_table('Construction')['GlobalWarming [kg CO2-eq]']
-            return table_construction['Stainless_steel [kg]']['A230']+table_construction['Carbon_steel [kg]']['A250']
-        
-        @metric(name='HT_HC_construction_GWP',units='kg CO2 eq',element='LCA')
-        def get_HT_HC_construction_GWP():
-            table_construction = lca.get_impact_table('Construction')['GlobalWarming [kg CO2-eq]']
-            return table_construction['Carbon_steel [kg]']['T500']+table_construction['Carbon_steel [kg]']['T510']+\
-                   table_construction['Stainless_steel [kg]']['A300']+table_construction['Stainless_steel [kg]']['A310']+\
-                   table_construction['Stainless_steel [kg]']['A330']+table_construction['Carbon_steel [kg]']['A340']+\
-                   table_construction['Stainless_steel [kg]']['A360']+table_construction['Carbon_steel [kg]']['A370']+\
-                   table_construction['Carbon_steel [kg]']['A380']+table_construction['Carbon_steel [kg]']['A390']+\
-                   table_construction['Stainless_steel [kg]']['A400']+table_construction['Stainless_steel [kg]']['A410']+\
-                   table_construction['Stainless_steel [kg]']['A420']+table_construction['Carbon_steel [kg]']['A440']+\
-                   table_construction['Carbon_steel [kg]']['A450']+table_construction['Stainless_steel [kg]']['A500']+\
-                   table_construction['Stainless_steel [kg]']['A510']
-        
-        @metric(name='CHP_constrution_GWP',units='kg CO2 eq',element='LCA')
-        def get_CHP_constrution_GWP():
-            table_construction = lca.get_impact_table('Construction')['GlobalWarming [kg CO2-eq]']
-            return table_construction['Carbon_steel [kg]']['CHP']+table_construction['Concrete [kg]']['CHP']+\
-                   table_construction['Furnace [kg]']['CHP']+table_construction['Reinforcing_steel [kg]']['CHP']
+        @metric(name='HTL_stream_GWP',units='kg CO2 eq',element='LCA')
+        def get_HTL_stream_GWP():
+            table_stream = lca.get_impact_table('Stream')['GlobalWarming [kg CO2-eq]']
+            return table_stream['NaOH_HTL']+table_stream['HCl']
         
         @metric(name='CHG_stream_GWP',units='kg CO2 eq',element='LCA')
         def get_CHG_stream_GWP():
@@ -1700,78 +1516,50 @@ def create_model(system=None,
         @metric(name='HT_HC_stream_GWP',units='kg CO2 eq',element='LCA')
         def get_HT_HC_stream_GWP():
             table_stream = lca.get_impact_table('Stream')['GlobalWarming [kg CO2-eq]']
-            return table_stream['H2']+table_stream['HT_catalyst_out']+table_stream['HC_catalyst_out']+table_stream['gasoline']+table_stream['diesel']
+            return table_stream['hydrogen_gas']+table_stream['HT_catalyst_out']+table_stream['HC_catalyst_out']+table_stream['gasoline']+table_stream['diesel']
         
         @metric(name='nutrient_stream_GWP',units='kg CO2 eq',element='LCA')
         def get_nutrient_stream_GWP():
             table_stream = lca.get_impact_table('Stream')['GlobalWarming [kg CO2-eq]']
             return table_stream['H2SO4']+table_stream['MgCl2']+table_stream['MgO']+table_stream['struvite']+\
-                   table_stream['NH4Cl']+table_stream['Membrane_in']+table_stream['NaOH']+table_stream['ammonium_sulfate']
+                   table_stream['NH4Cl']+table_stream['Membrane_in']+table_stream['NaOH_MemDis']+table_stream['ammonium_sulfate']
                    
         @metric(name='CHP_stream_GWP',units='kg CO2 eq',element='LCA')
         def get_CHP_stream_GWP():
             table_stream = lca.get_impact_table('Stream')['GlobalWarming [kg CO2-eq]']
             return table_stream['natural_gas']
         
+        @metric(name='CT_stream_GWP',units='kg CO2 eq',element='LCA')
+        def get_CT_stream_GWP():
+            table_stream = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
+            return table_stream['CT_chemicals [kg]']
+        
         try:
             SluC = unit.SluC
             @metric(name='HTL_utility_GWP',units='kg CO2 eq',element='LCA')
             def get_HTL_utility_GWP():
                 table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
-                a = 0
-                for i in range (len(HTL.heat_utilities)):
-                    if HTL.heat_utilities[i].duty < 0:
-                        a += HTL.heat_utilities[i].duty
-                return table_other['Cooling [MJ]']/sys.get_cooling_duty()*(-a*sys.operating_hours)+\
-                       table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
+                return table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
                        (SluC.power_utility.consumption+P1.power_utility.consumption)*sys.operating_hours
         
         except AttributeError:
             @metric(name='HTL_utility_GWP',units='kg CO2 eq',element='LCA')
             def get_HTL_utility_GWP():
                 table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
-                a = 0
-                for i in range (len(HTL.heat_utilities)):
-                    if HTL.heat_utilities[i].duty < 0:
-                        a += HTL.heat_utilities[i].duty
-                return table_other['Cooling [MJ]']/sys.get_cooling_duty()*(-a*sys.operating_hours)+\
-                       table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
+                return table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
                        (P1.power_utility.consumption)*sys.operating_hours    
     
         @metric(name='CHG_utility_GWP',units='kg CO2 eq',element='LCA')
         def get_CHG_utility_GWP():
             table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
-            a = 0
-            for unit in (CHG, F1):
-                for i in range (len(unit.heat_utilities)):
-                    if unit.heat_utilities[i].duty < 0:
-                        a += unit.heat_utilities[i].duty
-            return table_other['Cooling [MJ]']/sys.get_cooling_duty()*(-a*sys.operating_hours)+\
-                   table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
+            return table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
                    CHG.power_utility.consumption*sys.operating_hours
         
-        P2, P3 = unit.P2, unit.P3
-        HT_HC_utility_units = (HT, unit.H2, F2, D1, D2, D3, HC, unit.H4, F3, D4, unit.H5, unit.H6)
         @metric(name='HT_HC_utility_GWP',units='kg CO2 eq',element='LCA')
         def get_HT_HC_utility_GWP():
             table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
-            a = 0
-            for unit in HT_HC_utility_units:
-                for i in range (len(unit.heat_utilities)):
-                    if unit.heat_utilities[i].duty < 0:
-                        a += unit.heat_utilities[i].duty
-            return table_other['Cooling [MJ]']/sys.get_cooling_duty()*(-a*sys.operating_hours)+\
-                   table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
+            return table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
                    (P2.power_utility.consumption+P3.power_utility.consumption)*sys.operating_hours
-        
-        @metric(name='HXN_utility_GWP',units='kg CO2 eq',element='LCA')
-        def get_HXN_utility_GWP():
-            table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
-            a = 0
-            for i in range (len(HXN.heat_utilities)):
-                if HXN.heat_utilities[i].duty > 0:
-                    a += HXN.heat_utilities[i].duty
-            return table_other['Cooling [MJ]']/sys.get_cooling_duty()*(-a*sys.operating_hours)
         
         @metric(name='CHP_utility_GWP',units='kg CO2 eq',element='LCA')
         def get_CHP_utility_GWP():
@@ -1779,15 +1567,22 @@ def create_model(system=None,
             return table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
                    (-CHP.power_utility.production)*sys.operating_hours
         
+        @metric(name='CT_utility_GWP',units='kg CO2 eq',element='LCA')
+        def get_CT_utility_GWP():
+            table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
+            return table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
+                   CT.power_utility.consumption*sys.operating_hours
+                   
+        @metric(name='CWP_utility_GWP',units='kg CO2 eq',element='LCA')
+        def get_CWP_utility_GWP():
+            table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
+            return table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
+                   CWP.power_utility.consumption*sys.operating_hours
+        
         @metric(name='electricity_GWP',units='kg CO2 eq',element='LCA')
         def get_electricity_GWP():
             table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
             return table_other['Electricity [kWh]']
-        
-        @metric(name='cooling_GWP',units='kg CO2 eq',element='LCA')
-        def get_cooling_GWP():
-            table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
-            return table_other['Cooling [MJ]']
         
         @metric(name='HTL_cooling_percentage',units='-',element='utilities')
         def get_HTL_cooling_percentage():
@@ -1882,12 +1677,7 @@ def create_model(system=None,
         @metric(name='HXN_cool_offset',units='-',element='utilities')
         def get_HXN_cool_offset():
             return 1-unit.HXN.actual_cool_util_load/unit.HXN.original_cool_util_load
-
-    else:
-        diesel = stream.diesel
-        lca = sys.LCA
-        HTL = unit.HTL
-        
+    
     if include_HTL_yield_as_metrics:
         @metric(name='HTL_biocrude_yield',units='-',element='HTL')
         def get_HTL_biocrude_yield():
@@ -1904,97 +1694,30 @@ def create_model(system=None,
         @metric(name='HTL_gas_yield',units='-',element='HTL')
         def get_HTL_gas_yield():
             return HTL.gas_yield
-        
+    
     # key metrics
-    @metric(name='MDSP',units='$/gal diesel',element='TEA')
+    @metric(name='MDSP',units='$/gal diesel',element='key_metric')
     def get_MDSP():
         diesel_gal_2_kg=3.220628346
         return tea.solve_price(diesel)*diesel_gal_2_kg
     
-    @metric(name='sludge_management_price',units='$/tonne dry sludge',element='TEA')
+    @metric(name='sludge_management_price',units='$/tonne dry sludge',element='key_metric')
     def get_sludge_treatment_price():
         return -tea.solve_price(raw_wastewater)*_MMgal_to_L/WWTP.ww_2_dry_sludge
     
-    @metric(name='GWP_diesel',units='kg CO2/MMBTU diesel',element='LCA')
+    @metric(name='GWP_diesel',units='kg CO2/MMBTU diesel',element='key_metric')
     def get_GWP_diesel():
         return lca.get_total_impacts(exclude=(diesel,))['GlobalWarming']/diesel.F_mass/sys.operating_hours/lca.lifetime/45.6/_MJ_to_MMBTU
     # gasoline : 46.4 MJ/kg
     # diesel: 45.6 MJ/kg
     
-    @metric(name='GWP_sludge',units='kg CO2/tonne dry sludge',element='LCA')
+    @metric(name='GWP_sludge',units='kg CO2/tonne dry sludge',element='key_metric')
     def get_GWP_sludge():
         return lca.get_total_impacts(exclude=(raw_wastewater,))['GlobalWarming']/raw_wastewater.F_vol/_m3perh_to_MGD/WWTP.ww_2_dry_sludge/(sys.operating_hours/24)/lca.lifetime
-    
-    if include_other_CFs_as_metrics:
-    
-        @metric(name='OzoneDepletion_diesel',units='kg CFC-11-eq/MMBTU diesel',element='LCA')
-        def get_OZP_diesel():
-            return lca.get_total_impacts(exclude=(diesel,))['OzoneDepletion']/diesel.F_mass/sys.operating_hours/lca.lifetime/45.6/_MJ_to_MMBTU
-
-        @metric(name='OzoneDepletion_sludge',units='kg CFC-11-eq/tonne dry sludge',element='LCA')
-        def get_OZP_sludge():
-            return lca.get_total_impacts(exclude=(raw_wastewater,))['OzoneDepletion']/raw_wastewater.F_vol/_m3perh_to_MGD/WWTP.ww_2_dry_sludge/(sys.operating_hours/24)/lca.lifetime
-    
-        @metric(name='Carcinogenics_diesel',units='kg benzene-eq/MMBTU diesel',element='LCA')
-        def get_CAR_diesel():
-            return lca.get_total_impacts(exclude=(diesel,))['Carcinogenics']/diesel.F_mass/sys.operating_hours/lca.lifetime/45.6/_MJ_to_MMBTU
-
-        @metric(name='Carcinogenics_sludge',units='kg benzene-eq/tonne dry sludge',element='LCA')
-        def get_CAR_sludge():
-            return lca.get_total_impacts(exclude=(raw_wastewater,))['Carcinogenics']/raw_wastewater.F_vol/_m3perh_to_MGD/WWTP.ww_2_dry_sludge/(sys.operating_hours/24)/lca.lifetime
-    
-        @metric(name='Acidification_diesel',units='moles of H+-eq/MMBTU diesel',element='LCA')
-        def get_ACD_diesel():
-            return lca.get_total_impacts(exclude=(diesel,))['Acidification']/diesel.F_mass/sys.operating_hours/lca.lifetime/45.6/_MJ_to_MMBTU
-
-        @metric(name='Acidification_sludge',units='moles of H+-eq/tonne dry sludge',element='LCA')
-        def get_ACD_sludge():
-            return lca.get_total_impacts(exclude=(raw_wastewater,))['Acidification']/raw_wastewater.F_vol/_m3perh_to_MGD/WWTP.ww_2_dry_sludge/(sys.operating_hours/24)/lca.lifetime
-    
-        @metric(name='RespiratoryEffects_diesel',units='kg PM2.5-eq/MMBTU diesel',element='LCA')
-        def get_RES_diesel():
-            return lca.get_total_impacts(exclude=(diesel,))['RespiratoryEffects']/diesel.F_mass/sys.operating_hours/lca.lifetime/45.6/_MJ_to_MMBTU
-
-        @metric(name='RespiratoryEffects_sludge',units='kg PM2.5-eq/tonne dry sludge',element='LCA')
-        def get_RES_sludge():
-            return lca.get_total_impacts(exclude=(raw_wastewater,))['RespiratoryEffects']/raw_wastewater.F_vol/_m3perh_to_MGD/WWTP.ww_2_dry_sludge/(sys.operating_hours/24)/lca.lifetime
-    
-        @metric(name='Eutrophication_diesel',units='kg N/MMBTU diesel',element='LCA')
-        def get_EUT_diesel():
-            return lca.get_total_impacts(exclude=(diesel,))['Eutrophication']/diesel.F_mass/sys.operating_hours/lca.lifetime/45.6/_MJ_to_MMBTU
-
-        @metric(name='Eutrophication_sludge',units='kg N/tonne dry sludge',element='LCA')
-        def get_EUT_sludge():
-            return lca.get_total_impacts(exclude=(raw_wastewater,))['Eutrophication']/raw_wastewater.F_vol/_m3perh_to_MGD/WWTP.ww_2_dry_sludge/(sys.operating_hours/24)/lca.lifetime
-    
-        @metric(name='PhotochemicalOxidation_diesel',units='kg NOx-eq/MMBTU diesel',element='LCA')
-        def get_PHO_diesel():
-            return lca.get_total_impacts(exclude=(diesel,))['PhotochemicalOxidation']/diesel.F_mass/sys.operating_hours/lca.lifetime/45.6/_MJ_to_MMBTU
-
-        @metric(name='PhotochemicalOxidation_sludge',units='kg NOx-eq/tonne dry sludge',element='LCA')
-        def get_PHO_sludge():
-            return lca.get_total_impacts(exclude=(raw_wastewater,))['PhotochemicalOxidation']/raw_wastewater.F_vol/_m3perh_to_MGD/WWTP.ww_2_dry_sludge/(sys.operating_hours/24)/lca.lifetime
-    
-        @metric(name='Ecotoxicity_diesel',units='kg 2,4-D-eq/MMBTU diesel',element='LCA')
-        def get_ECO_diesel():
-            return lca.get_total_impacts(exclude=(diesel,))['Ecotoxicity']/diesel.F_mass/sys.operating_hours/lca.lifetime/45.6/_MJ_to_MMBTU
-
-        @metric(name='Ecotoxicity_sludge',units='kg 2,4-D-eq/tonne dry sludge',element='LCA')
-        def get_ECO_sludge():
-            return lca.get_total_impacts(exclude=(raw_wastewater,))['Ecotoxicity']/raw_wastewater.F_vol/_m3perh_to_MGD/WWTP.ww_2_dry_sludge/(sys.operating_hours/24)/lca.lifetime
-    
-        @metric(name='NonCarcinogenics_diesel',units='kg toluene-eq/MMBTU diesel',element='LCA')
-        def get_NCA_diesel():
-            return lca.get_total_impacts(exclude=(diesel,))['NonCarcinogenics']/diesel.F_mass/sys.operating_hours/lca.lifetime/45.6/_MJ_to_MMBTU
-
-        @metric(name='NonCarcinogenics_sludge',units='kg toluene-eq/tonne dry sludge',element='LCA')
-        def get_NCA_sludge():
-            return lca.get_total_impacts(exclude=(raw_wastewater,))['NonCarcinogenics']/raw_wastewater.F_vol/_m3perh_to_MGD/WWTP.ww_2_dry_sludge/(sys.operating_hours/24)/lca.lifetime
         
     if include_check:
-        
         @metric(name='sludge_afdw_carbohydrate',units='-',element='test')
         def get_sludge_afdw_carbohydrate():
-            return unit.WWTP.sludge_afdw_carbo
+            return unit.WWTP.afdw_carbo
     
     return model
