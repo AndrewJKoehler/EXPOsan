@@ -265,6 +265,7 @@ def create_system(configuration='baseline',
     # HTL
     # =========================================================================
     
+    # TODO: add AD as a sanunit if necessary
     # TODO: from Jeremy: add heat loss for AD; add here by setting heat_transfer_efficiency?
     # U: 3, 3.5, 4 BTU/hr/ft2/F as minimum, baseline, and maximum (case B in [5])
     # unit conversion can be found in the original HTL model
