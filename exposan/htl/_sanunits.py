@@ -795,6 +795,7 @@ class WWTP(SanUnit):
         
         # anaerobic digestion        
         if self.feedstock == 'biosolid':
+            # TODO: double check the calculation here
             # TODO: ask Andrew, double check the density of methane (0.657 kg/m3)
             # TODO: update these values with Metcalfe and Eddy values
             # 0.178108571 L methane/kg VSS, methane density 0.7513 kg methane/L of methane
@@ -832,13 +833,17 @@ class WWTP(SanUnit):
     
     # TODO: ask Jianan if lignin should be included in C_ratio
     # TODO: yes, we need to determine the element composition of lignin
+    # maybe the same as carbohydrate
+    # TODO: add unceratinty for lignin_2_C
     @property
     def C_ratio(self):
        return self.dw_protein*self.protein_2_C + self.dw_lipid*self.lipid_2_C +\
            self.dw_carbo*self.carbo_2_C
     
     # TODO: ask Jianan if lignin should be included in H_ratio       
-    # TODO: yes, we need to determine the element composition of lignin    
+    # TODO: yes, we need to determine the element composition of lignin  
+    # maybe the same as carbohydrate
+    # TODO: add unceratinty for lignin_2_H
     @property
     def H_ratio(self):
        return self.dw_protein*self.protein_2_H + self.dw_lipid*self.lipid_2_H +\

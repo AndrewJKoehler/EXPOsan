@@ -80,10 +80,6 @@ References:
      Environ. Sci. Technol. 2023. https://doi.org/10.1021/acs.est.2c07936.
 '''
 
-# TODO 1: update HTL classes in _hydrothermal.py
-# TODO 2: any other TODOs
-# TODO 3: summarize all questions/discussion points for Andrew
-
 import qsdsan as qs, biosteam as bst
 from qsdsan import sanunits as qsu
 from biosteam.units import IsenthalpicValve
@@ -109,6 +105,7 @@ _ton_to_kg = auom('ton').conversion_factor('kg')
 
 # TODO: which cost year do we want to use?
 # TODO: also update cost year in the process setting
+# use 2022 for now
 
 # GDPCTPI (Gross Domestic Product: Chain-type Price Index), [1]
 GDPCTPI = {2007: 86.352,
@@ -215,6 +212,7 @@ def create_system(configuration='baseline',
             afdw_lignin_content = 0.02
         else:
             afdw_lignin_content = 0.02
+    # MCA model does not consider lignin
     else:
         afdw_lignin_content = 0
     
@@ -318,7 +316,6 @@ def create_system(configuration='baseline',
         
         M1_ins1 = AcidEx.outs[1]
     
-    # TODO: check the pH calculation, see notes in _hydrothermal.py
     M1 = su.HTLmixer(ID='M1', ins=(HTL-1, M1_ins1), outs='mixture')
     
     StruPre = su.StruvitePrecipitation(ID='StruPre', ins=(M1-0,'MgCl2','NH4Cl','MgO'),
@@ -537,7 +534,7 @@ def create_system(configuration='baseline',
     # LCA
     # =========================================================================
     
-    # TODO: ask Andrew, are we just considering GWP? 
+    # for now, just include GWP, add others if necessary
     GlobalWarming = qs.ImpactIndicator(ID='GlobalWarming',
                                        method='TRACI',
                                        category='environmental impact',
