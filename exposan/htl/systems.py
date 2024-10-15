@@ -289,12 +289,13 @@ def create_system(configuration='baseline',
                                        ins=(H1-0, NaOH_WS-0, 'PFAS_in', HCl_Tank-0),
                                        outs=('hydrochar','HTL_aqueous','biocrude','offgas_HTL'),
                                        HTL_model=HTL_model,
-                                       mositure_adjustment_exist_in_the_system=True,
+                                       rxn_moisture=set_moisture,
                                        NaOH_M=NaOH_M,
                                        feedstock=feedstock,
                                        rxn_time=rxn_time,
                                        rxn_temp=rxn_temp,
-                                       HCl_neut=HCl_neutralize)
+                                       HCl_neut=HCl_neutralize,
+                                       mositure_adjustment_exist_in_the_system=True)
     
     # =========================================================================
     # CHG
