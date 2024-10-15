@@ -84,7 +84,7 @@ from .models import *
 
 from . import geospatial_models
 from .geospatial_models import *
-
+#TODO: Allow Sobol, Morris instead of Spearman
 def simulate_and_save(model,
                       resample=True, samples_kwargs={'N':1000, 'rule':'L', 'seed':3221},
                       include_spearman=True, spearman_kwargs={'nan_policy': 'omit'},
@@ -106,6 +106,7 @@ def simulate_and_save(model,
         kwargs = {'nan_policy': 'omit'}
         kwargs.update(spearman_kwargs)
         r_df, p_df = qs.stats.get_correlations(model, kind='Spearman', **kwargs)
+        #can change 'Spearman' to 'Sobol'
 
     if export_results:
         ID = model.system.flowsheet.ID
@@ -120,6 +121,7 @@ def simulate_and_save(model,
             if include_spearman:
                 r_df.to_excel(writer, sheet_name='Spearman_r')
                 p_df.to_excel(writer, sheet_name='Spearman_p')
+            
             
                 
 

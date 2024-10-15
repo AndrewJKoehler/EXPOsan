@@ -743,9 +743,9 @@ class WWTP(SanUnit):
                  protein_2_N=0.159,
                  N_2_P=0.3927,
                  feedstock='sludge',
-                 # TODO: update these values with Metcalfe and Eddy values
+                 # TODO: update these values with Metcalf and Eddy values
                  # value = loss of VSS, average from lit, see excel
-                 VSS_reduction=0.385664,
+                 VSS_reduction=0.38,
                  before_AD_dw_ash=0.257,
                  operation_hours=yearly_operation_hour,
                  high_IRR=None):

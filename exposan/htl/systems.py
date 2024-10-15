@@ -183,8 +183,9 @@ def create_system(configuration='baseline',
     
     # sludge compositions from [3]
     if feedstock == 'sludge':
-        # TODO: investigate raising to ~0.97
-        moisture_content = 0.8
+        moisture_content = 0.975 #value from Metcalf & Eddy, 2003
+        #range from 1.5-4, average is 2.5
+        #TODO: check the difference in LCA, TEA if value is changed
         dw_ash_content = 0.231
         afdw_lipid_content = 0.206
         afdw_protein_content = 0.456      
@@ -195,9 +196,9 @@ def create_system(configuration='baseline',
     # TODO: update biosolids compositions
     else:
         moisture_content = 0.8
-        dw_ash_content = 0.231
-        afdw_lipid_content = 0.206
-        afdw_protein_content = 0.456
+        dw_ash_content = 0.45
+        afdw_lipid_content = 0.097
+        afdw_protein_content = 0.324
         N_2_P_value = 0.3927
         # TODO: update these values with Metcalfe and Eddy values
         # value = loss of VSS, average from lit, see excel
@@ -211,7 +212,7 @@ def create_system(configuration='baseline',
         if feedstock == 'sludge':
             afdw_lignin_content = 0.02
         else:
-            afdw_lignin_content = 0.02
+            afdw_lignin_content = 0.231
     # MCA model does not consider lignin
     else:
         afdw_lignin_content = 0

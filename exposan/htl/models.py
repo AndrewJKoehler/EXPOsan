@@ -146,6 +146,7 @@ def create_model(system=None,
     cooling_tower_chemicals = stream.cooling_tower_chemicals
     
     feedstock = sys.flowsheet.WWTP.feedstock
+    HTL_model = sys.flowsheet.HTL.HTL_model
     high_IRR = sys.flowsheet.WWTP.high_IRR
     
     tea = sys.TEA
@@ -156,15 +157,14 @@ def create_model(system=None,
     # =========================================================================
     
     if not exclude_sludge_compositions:
-        # TODO: update values for sludge
         if feedstock == 'sludge':
             
-            dist = shape.Uniform(0.6,0.8)
+            dist = shape.Triangle(0.96,0.975,0.985)
             @param(name='sludge_moisture',
                    element=WWTP,
                    kind='coupled',
                    units='-',
-                   baseline=0.7,
+                   baseline=0.975,
                    distribution=dist)
             def set_WWTP_sludge_moisture(i):
                 WWTP.moisture=i
@@ -208,21 +208,31 @@ def create_model(system=None,
                    distribution=dist)
             def set_sludge_N_2_P(i):
                 WWTP.N_2_P=i
+            
+            if HTL_model == 'kinetics':
+                dist = shape.Triangle(0.01,0.02,0.03)
+                @param(name='sludge_afdw_lignin',
+                       element=WWTP,
+                       kind='coupled',
+                       units='-',
+                       baseline=0.02,
+                       distribution=dist)
+                def set_sludge_afdw_lignin(i):
+                    WWTP.afdw_lignin=i           
         
-        # TODO: update values for biosolid
         if feedstock == 'biosolid':
            
-           dist = shape.Uniform(0.6,0.8)
+           dist = shape.Uniform(0.75,0.85)
            @param(name='biosolid_moisture',
                   element=WWTP,
                   kind='coupled',
                   units='-',
-                  baseline=0.7,
+                  baseline=0.8,
                   distribution=dist)
            def set_WWTP_biosolid_moisture(i):
                WWTP.moisture=i
            
-           dist = shape.Triangle(0.174,0.257,0.414)
+           dist = shape.Triangle(0.3,0.4,0.5)
            @param(name='sludge_dw_ash',
                   element=WWTP,
                   kind='coupled',
@@ -232,7 +242,7 @@ def create_model(system=None,
            def set_biosolid_dw_ash(i):
                WWTP.dw_ash=i
            
-           dist = shape.Triangle(0.08,0.204,0.308)
+           dist = shape.Triangle(0.10,0.15,0.20)
            @param(name='sludge_afdw_lipid',
                   element=WWTP,
                   kind='coupled',
@@ -242,7 +252,7 @@ def create_model(system=None,
            def set_biosolid_afdw_lipid(i):
                WWTP.afdw_lipid=i
            
-           dist = shape.Triangle(0.20,0.25,0.30)
+           dist = shape.Triangle(0.35,0.25,0.45)
            @param(name='sludge_afdw_protein',
                   element=WWTP,
                   kind='coupled',
@@ -261,6 +271,17 @@ def create_model(system=None,
                   distribution=dist)
            def set_biosolid_N_2_P(i):
                WWTP.N_2_P=i
+
+           if HTL_model == 'kinetics':
+               dist = shape.Triangle(0.15,0.20,0.25)
+               @param(name='biosolid_afdw_lignin',
+                      element=WWTP,
+                      kind='coupled',
+                      units='-',
+                      baseline=0.20,
+                      distribution=dist)
+               def set_biosolid_afdw_lignin(i):
+                   WWTP.afdw_lignin=i
 
     dist = shape.Uniform(0.675,0.825)
     @param(name='lipid_2_C',
