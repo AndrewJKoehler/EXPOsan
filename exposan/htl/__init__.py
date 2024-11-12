@@ -99,7 +99,7 @@ def simulate_and_save(model,
     parameters = model.table.iloc[:, :idx]
     results = model.table.iloc[:, idx:]
     percentiles = results.quantile([0, 0.05, 0.25, 0.5, 0.75, 0.95, 1])
-    model_info = {'Category': ['Model', 'IRR', 'Biosolid wt%', 'Added NaOH'],'Info': [model.system.flowsheet.HTL.model_type, model.system.TEA.IRR, model.system.flowsheet.HTL.rxn_moisture, model.system.flowsheet.HTL.NaOH_molarity]}
+    model_info = {'Category': ['Model', 'IRR', 'Biosolid wt%', 'Added NaOH'],'Info': [model.system.flowsheet.HTL.model_type, [i for i in model.parameters if i.name == 'IRR'][0].baseline, model.system.flowsheet.HTL.rxn_moisture, model.system.flowsheet.HTL.NaOH_molarity]}
     info_df=pd.DataFrame(model_info)
 
     if include_spearman:

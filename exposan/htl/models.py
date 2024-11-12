@@ -237,7 +237,7 @@ def create_model(system=None,
                   element=WWTP,
                   kind='coupled',
                   units='-',
-                  baseline=0.257,
+                  baseline=0.4,
                   distribution=dist)
            def set_biosolid_dw_ash(i):
                WWTP.dw_ash=i
@@ -247,17 +247,17 @@ def create_model(system=None,
                   element=WWTP,
                   kind='coupled',
                   units='-',
-                  baseline=0.204,
+                  baseline=0.15,
                   distribution=dist)
            def set_biosolid_afdw_lipid(i):
                WWTP.afdw_lipid=i
            
-           dist = shape.Triangle(0.35,0.25,0.45)
+           dist = shape.Triangle(0.25,0.35,0.45)
            @param(name='sludge_afdw_protein',
                   element=WWTP,
                   kind='coupled',
                   units='-',
-                  baseline=0.463,
+                  baseline=0.35,
                   distribution=dist)
            def set_biosolid_afdw_protein(i):
                WWTP.afdw_protein=i

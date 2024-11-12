@@ -148,8 +148,8 @@ def create_system(configuration='baseline',
                   set_moisture=0.8,
                   NaOH_M=3,
                   # TODO: update the values for waste_cost and waste_GWP
-                  waste_cost=500,
-                  waste_GWP=200,
+                  waste_cost=0, #change for incineration when considering alternatives, was 500
+                  waste_GWP=0, #change for incineration when considering alternatives, was 200
                   high_IRR=False,
                   HCl_neutralize=False):
     
