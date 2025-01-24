@@ -164,7 +164,7 @@ def create_system(configuration='baseline',
     if feedstock not in ['sludge','biosolid']:
         raise ValueError("invalid feedstock, select from 'sludge' and 'biosolid'")
     
-    if HTL_model not in ['MCA','kinetics']:
+    if HTL_model not in ['MCA','kinetics','MCA_adj']:
         raise ValueError("invalid feedstock, select from 'MCA' and 'kinetics'")
     
     # clear flowsheet and registry for reloading

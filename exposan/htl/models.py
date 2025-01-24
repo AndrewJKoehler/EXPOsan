@@ -209,7 +209,7 @@ def create_model(system=None,
             def set_sludge_N_2_P(i):
                 WWTP.N_2_P=i
             
-            if HTL_model == 'kinetics':
+            if HTL_model == 'kinetics' or 'MCA_adj':
                 dist = shape.Triangle(0.01,0.02,0.03)
                 @param(name='sludge_afdw_lignin',
                        element=WWTP,
@@ -272,7 +272,7 @@ def create_model(system=None,
            def set_biosolid_N_2_P(i):
                WWTP.N_2_P=i
 
-           if HTL_model == 'kinetics':
+           if HTL_model == 'kinetics' or 'MCA_adj':
                dist = shape.Triangle(0.15,0.20,0.25)
                @param(name='biosolid_afdw_lignin',
                       element=WWTP,
