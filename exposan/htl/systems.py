@@ -165,7 +165,7 @@ def create_system(configuration='baseline',
         raise ValueError("invalid feedstock, select from 'sludge' and 'biosolid'")
     
     if HTL_model not in ['MCA','kinetics','MCA_adj']:
-        raise ValueError("invalid feedstock, select from 'MCA' and 'kinetics'")
+        raise ValueError("invalid feedstock, select from 'MCA' and 'kinetics' and 'MCA_adj'")
     
     # clear flowsheet and registry for reloading
     if hasattr(qs.main_flowsheet.flowsheet, flowsheet_ID):
