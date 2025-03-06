@@ -1347,6 +1347,15 @@ def create_model(system=None,
         def get_TIC():
             return sys.installed_equipment_cost
         
+        #PFAS destruction
+        @metric(name='PFOS_destruction', units = '%',element='PFAS')
+        def get_PFOS_destruction():
+            return HTL.PFOS_destruction*100
+        
+        @metric(name='PFHxS_destruction', units = '%',element='PFAS')
+        def get_PFHxS_destruction():
+            return HTL.PFHxS_destruction*100
+        
         try:
             SluC = unit.SluC
             @metric(name='HTL_TIC',units='$',element='TEA')
