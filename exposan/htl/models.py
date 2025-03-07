@@ -1562,57 +1562,57 @@ def create_model(system=None,
         @metric(name='CT_stream_GWP',units='kg CO2 eq',element='LCA')
         def get_CT_stream_GWP():
             table_stream = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
-            return table_stream['CT_chemicals [kg]']
+            return table_stream['CT_chemicals']
         
         try:
             SluC = unit.SluC
             @metric(name='HTL_utility_GWP',units='kg CO2 eq',element='LCA')
             def get_HTL_utility_GWP():
                 table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
-                return table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
+                return table_other['Electricity']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
                        (SluC.power_utility.consumption+P1.power_utility.consumption)*sys.operating_hours
         
         except AttributeError:
             @metric(name='HTL_utility_GWP',units='kg CO2 eq',element='LCA')
             def get_HTL_utility_GWP():
                 table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
-                return table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
+                return table_other['Electricity']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
                        (P1.power_utility.consumption)*sys.operating_hours    
     
         @metric(name='CHG_utility_GWP',units='kg CO2 eq',element='LCA')
         def get_CHG_utility_GWP():
             table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
-            return table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
+            return table_other['Electricity']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
                    CHG.power_utility.consumption*sys.operating_hours
         
         @metric(name='HT_HC_utility_GWP',units='kg CO2 eq',element='LCA')
         def get_HT_HC_utility_GWP():
             table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
-            return table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
+            return table_other['Electricity']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
                    (P2.power_utility.consumption+P3.power_utility.consumption)*sys.operating_hours
         
         @metric(name='CHP_utility_GWP',units='kg CO2 eq',element='LCA')
         def get_CHP_utility_GWP():
             table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
-            return table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
+            return table_other['Electricity']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
                    (-CHP.power_utility.production)*sys.operating_hours
         
         @metric(name='CT_utility_GWP',units='kg CO2 eq',element='LCA')
         def get_CT_utility_GWP():
             table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
-            return table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
+            return table_other['Electricity']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
                    CT.power_utility.consumption*sys.operating_hours
                    
         @metric(name='CWP_utility_GWP',units='kg CO2 eq',element='LCA')
         def get_CWP_utility_GWP():
             table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
-            return table_other['Electricity [kWh]']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
+            return table_other['Electricity']/(sys.get_electricity_consumption()-sys.get_electricity_production())*\
                    CWP.power_utility.consumption*sys.operating_hours
         
         @metric(name='electricity_GWP',units='kg CO2 eq',element='LCA')
         def get_electricity_GWP():
             table_other = lca.get_impact_table('Other')['GlobalWarming [kg CO2-eq]']
-            return table_other['Electricity [kWh]']
+            return table_other['Electricity']
         
         @metric(name='HTL_cooling_percentage',units='-',element='utilities')
         def get_HTL_cooling_percentage():
