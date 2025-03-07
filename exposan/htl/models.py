@@ -61,7 +61,7 @@ GDPCTPI = {2007: 86.352,
 def create_model(system=None,
                  exclude_sludge_compositions=False,
                  include_HTL_yield_as_metrics=True,
-                 include_other_metrics=False,
+                 include_other_metrics=True,
                  include_check=True):
     '''
     Create a model based on the given system
